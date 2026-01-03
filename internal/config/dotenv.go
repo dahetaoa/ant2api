@@ -19,6 +19,8 @@ func loadDotEnv() {
 	}
 	defer file.Close()
 
+	apiKeyDefined := false
+
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		key, value, ok := parseDotEnvLine(scanner.Text())
@@ -26,11 +28,15 @@ func loadDotEnv() {
 			continue
 		}
 
-		if _, exists := os.LookupEnv(key); exists {
-			continue
+		if key == "API_KEY" {
+			apiKeyDefined = true
 		}
 
 		_ = os.Setenv(key, value)
+	}
+
+	if !apiKeyDefined {
+		_ = os.Unsetenv("API_KEY")
 	}
 }
 
