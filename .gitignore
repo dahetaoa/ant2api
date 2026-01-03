@@ -4,6 +4,8 @@ data/
 
 # Built binaries
 bin/
+server
+server.exe
 
 # Logs
 *.log

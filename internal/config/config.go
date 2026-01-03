@@ -46,6 +46,8 @@ const (
 
 func Load() *Config {
 	once.Do(func() {
+		loadDotEnv()
+
 		cfg = &Config{
 			Host:               getEnv("HOST", "0.0.0.0"),
 			Port:               getEnvInt("PORT", 8045),
@@ -127,4 +129,3 @@ func getEnvIntSlice(key string, defaultValue []int) []int {
 	}
 	return defaultValue
 }
-

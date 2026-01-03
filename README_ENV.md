@@ -10,7 +10,7 @@
 
 ## 环境变量
 
-建议在 `refactor/` 下启动，默认读取 `refactor/.env`：
+服务启动会尝试自动读取 `.env`（从当前目录向上查找，直到项目根目录；仅填充尚未设置的环境变量）：
 
 - `DATA_DIR=./data`
 - `API_USER_AGENT=antigravity/1.11.9 windows/amd64`（Claude 模型必须以 `antigravity/` 开头）
@@ -20,9 +20,5 @@
 
 ```bash
 cd refactor
-set -a
-. ./.env
-set +a
 go run ./cmd/server
 ```
-
