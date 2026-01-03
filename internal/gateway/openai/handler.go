@@ -63,7 +63,7 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeOpenAIError(w, http.StatusBadRequest, "Failed to read request body")
+		writeOpenAIError(w, http.StatusBadRequest, "读取请求体失败，请检查请求是否正确发送。")
 		return
 	}
 
@@ -71,7 +71,7 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	var req ChatRequest
 	if err := jsonpkg.Unmarshal(body, &req); err != nil {
-		writeOpenAIError(w, http.StatusBadRequest, "Invalid request")
+		writeOpenAIError(w, http.StatusBadRequest, "请求 JSON 解析失败，请检查请求体格式。")
 		return
 	}
 

@@ -147,7 +147,7 @@ func HandleModels(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(r.URL.Path, prefix)
 	if rest == "" || rest == "/" {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"message": "不支持的请求方法，请使用 GET。"}})
 			return
 		}
 		HandleListModels(w, r)
@@ -240,19 +240,19 @@ func modelFromPath(r *http.Request) (string, bool) {
 func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 	model, ok := modelFromPath(r)
 	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"message": "Not Found"}})
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"message": "未找到对应的模型或接口。"}})
 		return
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "Failed to read request body"}})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "读取请求体失败，请检查请求是否正确发送。"}})
 		return
 	}
 
 	logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, body)
 	var req GeminiRequest
 	if err := jsonpkg.Unmarshal(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "Invalid request"}})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "请求 JSON 解析失败，请检查请求体格式。"}})
 		return
 	}
 
@@ -306,13 +306,13 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 	model, ok := modelFromPath(r)
 	if !ok {
 		vertex.SetStreamHeaders(w)
-		vertex.WriteStreamError(w, "Not Found")
+		vertex.WriteStreamError(w, "未找到对应的模型或接口。")
 		return
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		vertex.SetStreamHeaders(w)
-		vertex.WriteStreamError(w, "Failed to read request body")
+		vertex.WriteStreamError(w, "读取请求体失败，请检查请求是否正确发送。")
 		return
 	}
 
@@ -320,7 +320,7 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 	var req GeminiRequest
 	if err := jsonpkg.Unmarshal(body, &req); err != nil {
 		vertex.SetStreamHeaders(w)
-		vertex.WriteStreamError(w, "Invalid request")
+		vertex.WriteStreamError(w, "请求 JSON 解析失败，请检查请求体格式。")
 		return
 	}
 

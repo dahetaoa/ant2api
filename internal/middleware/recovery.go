@@ -13,7 +13,7 @@ func Recovery(next http.Handler) http.Handler {
 				logger.Error("panic: %v", v)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
-				_, _ = w.Write([]byte(`{"error":{"message":"internal_server_error","type":"server_error"}}`))
+				_, _ = w.Write([]byte(`{"error":{"message":"服务器内部错误，请查看服务端日志。","type":"server_error"}}`))
 			}
 		}()
 		next.ServeHTTP(w, r)

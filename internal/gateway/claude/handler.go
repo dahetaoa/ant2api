@@ -16,7 +16,7 @@ import (
 func HandleMessages(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeClaudeError(w, http.StatusBadRequest, "Failed to read request body")
+		writeClaudeError(w, http.StatusBadRequest, "读取请求体失败，请检查请求是否正确发送。")
 		return
 	}
 
@@ -24,7 +24,7 @@ func HandleMessages(w http.ResponseWriter, r *http.Request) {
 
 	var req MessagesRequest
 	if err := jsonpkg.Unmarshal(body, &req); err != nil {
-		writeClaudeError(w, http.StatusBadRequest, "Invalid request")
+		writeClaudeError(w, http.StatusBadRequest, "请求 JSON 解析失败，请检查请求体格式。")
 		return
 	}
 
@@ -67,7 +67,7 @@ func HandleMessages(w http.ResponseWriter, r *http.Request) {
 func HandleCountTokens(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeClaudeError(w, http.StatusBadRequest, "Failed to read request body")
+		writeClaudeError(w, http.StatusBadRequest, "读取请求体失败，请检查请求是否正确发送。")
 		return
 	}
 
@@ -75,7 +75,7 @@ func HandleCountTokens(w http.ResponseWriter, r *http.Request) {
 	// Use same request schema.
 	var req MessagesRequest
 	if err := jsonpkg.Unmarshal(body, &req); err != nil {
-		writeClaudeError(w, http.StatusBadRequest, "Invalid request")
+		writeClaudeError(w, http.StatusBadRequest, "请求 JSON 解析失败，请检查请求体格式。")
 		return
 	}
 	startTime := time.Now()

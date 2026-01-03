@@ -50,7 +50,9 @@ func allowMethods(h http.HandlerFunc, methods ...string) http.HandlerFunc {
 		if errors.Is(r.Context().Err(), context.Canceled) {
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		_, _ = w.Write([]byte(`{"error":{"message":"不支持的请求方法，请检查接口要求的 HTTP Method。","type":"invalid_request_error"}}`))
 	}
 }
 
