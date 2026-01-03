@@ -1,0 +1,9 @@
+# Credentials and sensitive data
+.env
+data/
+
+# Built binaries
+bin/
+
+# Logs
+*.log
