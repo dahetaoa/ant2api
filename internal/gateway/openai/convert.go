@@ -2,6 +2,7 @@ package openai
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 
 	"anti2api-golang/refactor/internal/pkg/id"
@@ -34,7 +35,7 @@ func ToVertexRequest(req *ChatRequest, account *AccountContext) (*vertex.Request
 	}
 
 	vreq.Request.GenerationConfig = buildGenerationConfig(req)
-	vreq.Request.Contents = toVertexContents(req, requestID)
+	vreq.Request.Contents = vertex.SanitizeContents(toVertexContents(req, requestID))
 
 	return vreq, requestID, nil
 }
@@ -60,6 +61,9 @@ func extractSystem(messages []Message) string {
 
 func toVertexContents(req *ChatRequest, requestID string) []vertex.Content {
 	var out []vertex.Content
+	model := strings.TrimSpace(req.Model)
+	isClaudeThinking := strings.HasPrefix(model, "claude-") && strings.HasSuffix(model, "-thinking")
+	isGemini := strings.HasPrefix(model, "gemini-")
 	for _, m := range req.Messages {
 		switch m.Role {
 		case "system":
@@ -68,21 +72,49 @@ func toVertexContents(req *ChatRequest, requestID string) []vertex.Content {
 			out = append(out, vertex.Content{Role: "user", Parts: extractUserParts(m.Content)})
 		case "assistant":
 			parts := make([]vertex.Part, 0, 2+len(m.ToolCalls))
-			if m.Reasoning != "" {
-				parts = append(parts, vertex.Part{Text: m.Reasoning, Thought: true})
+			thinkingText := strings.TrimSpace(m.Reasoning)
+			if thinkingText == "" {
+				thinkingText = strings.TrimSpace(m.ReasoningContent)
 			}
+
+			firstToolSig := ""
+			if len(m.ToolCalls) > 0 {
+				if s, ok := signature.GetManager().LookupByToolCallID(m.ToolCalls[0].ID); ok {
+					firstToolSig = s
+				}
+			}
+
+			// Claude thinking models: only include thought parts when we can also attach a thoughtSignature.
+			// Some backend responses may omit thinking/signature; in that case, do NOT insert synthetic
+			// thought blocks (otherwise Vertex will reject the request).
+			if isClaudeThinking {
+				if firstToolSig != "" {
+					// IMPORTANT: If the client did not send a thinking chain for this turn, do not
+					// synthesize a thought block (even if we have a cached signature). Vertex history
+					// must reflect the client-provided content.
+					if thinkingText != "" {
+						parts = append(parts, vertex.Part{Text: thinkingText, Thought: true, ThoughtSignature: firstToolSig})
+					}
+				}
+			} else if thinkingText != "" {
+				parts = append(parts, vertex.Part{Text: thinkingText, Thought: true})
+			}
+
 			if t := getTextContent(m.Content); t != "" {
 				parts = append(parts, vertex.Part{Text: t})
 			}
 			for i, tc := range m.ToolCalls {
 				args := parseArgs(tc.Function.Arguments)
 				sig := ""
-				// Do not parse client-provided signatures; rely on tool_call_id indexed store only.
-				if s, ok := signature.GetManager().LookupByToolCallID(tc.ID); ok {
-					sig = s
-				}
-				if i != 0 {
-					sig = ""
+				if isGemini {
+					// Gemini: signature is attached to the first functionCall part.
+					// Claude: signature must not be placed on functionCall parts.
+					if s, ok := signature.GetManager().LookupByToolCallID(tc.ID); ok {
+						sig = s
+					}
+					if i != 0 {
+						sig = ""
+					}
 				}
 				parts = append(parts, vertex.Part{
 					FunctionCall:     &vertex.FunctionCall{ID: tc.ID, Name: tc.Function.Name, Args: args},
@@ -102,8 +134,14 @@ func toVertexContents(req *ChatRequest, requestID string) []vertex.Content {
 }
 
 func buildGenerationConfig(req *ChatRequest) *vertex.GenerationConfig {
+	model := strings.TrimSpace(req.Model)
+	isClaude := strings.HasPrefix(model, "claude-")
+	isGemini := strings.HasPrefix(model, "gemini-")
 	cfg := &vertex.GenerationConfig{CandidateCount: 1}
-	if req.MaxTokens > 0 {
+	// Gemini models: maxOutputTokens is fixed at 65535.
+	if isGemini {
+		cfg.MaxOutputTokens = 65535
+	} else if req.MaxTokens > 0 && !isClaude {
 		cfg.MaxOutputTokens = req.MaxTokens
 	}
 	if req.Temperature != nil {
@@ -112,19 +150,108 @@ func buildGenerationConfig(req *ChatRequest) *vertex.GenerationConfig {
 	if req.TopP != nil {
 		cfg.TopP = req.TopP
 	}
-	if req.ReasoningEffort != "" {
-		cfg.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingLevel: strings.ToLower(req.ReasoningEffort)}
+
+	// Enable thinking output when requested. Cloud Code API differs per model family:
+	// - Gemini 3: thinkingLevel
+	// - Gemini 2.5: thinkingBudget
+	// - Claude thinking: thinkingBudget
+	if tc := buildThinkingConfig(req.Model, req.ReasoningEffort); tc != nil {
+		cfg.ThinkingConfig = tc
+	}
+
+	// Claude models: maxOutputTokens is fixed at 64000.
+	if isClaude {
+		cfg.MaxOutputTokens = 64000
+	}
+
+	// When thinkingBudget is used, ensure it is compatible with maxOutputTokens.
+	if cfg.ThinkingConfig != nil && cfg.ThinkingConfig.ThinkingBudget > 0 {
+		if cfg.MaxOutputTokens <= 0 {
+			cfg.MaxOutputTokens = cfg.ThinkingConfig.ThinkingBudget + 4096
+		}
+		if isClaude {
+			maxBudget := cfg.MaxOutputTokens - 1024
+			if maxBudget < 1024 {
+				maxBudget = 1024
+			}
+			if cfg.ThinkingConfig.ThinkingBudget > maxBudget {
+				cfg.ThinkingConfig.ThinkingBudget = maxBudget
+			}
+		} else if isGemini && cfg.MaxOutputTokens <= cfg.ThinkingConfig.ThinkingBudget {
+			maxBudget := cfg.MaxOutputTokens - 1024
+			if maxBudget < 1024 {
+				maxBudget = 1024
+			}
+			cfg.ThinkingConfig.ThinkingBudget = maxBudget
+		} else if cfg.MaxOutputTokens <= cfg.ThinkingConfig.ThinkingBudget {
+			cfg.MaxOutputTokens = cfg.ThinkingConfig.ThinkingBudget + 4096
+		}
 	}
 	return cfg
+}
+
+func buildThinkingConfig(model, reasoningEffort string) *vertex.ThinkingConfig {
+	model = strings.TrimSpace(model)
+	effort := strings.ToLower(strings.TrimSpace(reasoningEffort))
+
+	isClaude := strings.HasPrefix(model, "claude-")
+	isClaudeThinking := isClaude && strings.HasSuffix(model, "-thinking")
+	isGemini3 := strings.HasPrefix(model, "gemini-3-") || strings.HasPrefix(model, "gemini-3")
+	isGemini25 := strings.HasPrefix(model, "gemini-2.5-") || strings.HasPrefix(model, "gemini-2.5")
+
+	// If the caller explicitly selects a Claude "-thinking" model, opt-in by default.
+	// This matches the project's docs: includeThoughts is required for thoughts/signature.
+	if effort == "" && isClaudeThinking {
+		return &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: 32000}
+	}
+
+	// Gemini 3 models: always use thinkingLevel=high.
+	// Gemini 3 models default to thinking mode, similar to Claude -thinking models.
+	if isGemini3 {
+		return &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingLevel: "high"}
+	}
+
+	if effort == "" {
+		return nil
+	}
+
+	if isClaudeThinking || isGemini25 {
+		// Support numeric effort as a direct thinking budget override for budget-based models.
+		if n, err := strconv.Atoi(effort); err == nil && n > 0 {
+			return &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: n}
+		}
+		if isClaudeThinking {
+			return &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: mapEffortToBudget(effort)}
+		}
+		return &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: mapGemini25EffortToBudget(effort)}
+	}
+
+	return &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingLevel: effort}
+}
+
+func mapEffortToBudget(effort string) int {
+	switch strings.ToLower(strings.TrimSpace(effort)) {
+	case "minimal", "low":
+		return 1024
+	case "medium":
+		return 4096
+	case "high", "max":
+		return 32000
+	default:
+		return 32000
+	}
+}
+
+func mapGemini25EffortToBudget(effort string) int {
+	_ = effort
+	// Keep conservative by default: Gemini 2.5 examples commonly use small budgets (e.g. 1024).
+	return 1024
 }
 
 func toVertexTools(tools []Tool) []vertex.Tool {
 	var out []vertex.Tool
 	for _, t := range tools {
-		params := t.Function.Parameters
-		if params != nil {
-			delete(params, "$schema")
-		}
+		params := vertex.SanitizeFunctionParametersSchema(t.Function.Parameters)
 		out = append(out, vertex.Tool{FunctionDeclarations: []vertex.FunctionDeclaration{{Name: t.Function.Name, Description: t.Function.Description, Parameters: params}}})
 	}
 	return out

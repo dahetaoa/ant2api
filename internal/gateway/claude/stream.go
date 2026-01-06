@@ -3,6 +3,7 @@ package claude
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 
 	"anti2api-golang/refactor/internal/pkg/id"
@@ -19,16 +20,17 @@ type StreamDataPart struct {
 }
 
 type SSEEmitter struct {
-	w                  http.ResponseWriter
-	requestID          string
-	model              string
-	inputTokens        int
-	nextIndex          int
-	textBlockIndex     *int
-	thinkingBlockIndex *int
-	collectedEvents    []map[string]any
-	pendingSignature   string
-	mu                 sync.Mutex
+	w                        http.ResponseWriter
+	requestID                string
+	model                    string
+	inputTokens              int
+	nextIndex                int
+	textBlockIndex           *int
+	thinkingBlockIndex       *int
+	collectedEvents          []map[string]any
+	pendingThinkingSignature string
+	enableThinkingSignature  bool
+	mu                       sync.Mutex
 }
 
 func SetSSEHeaders(w http.ResponseWriter) {
@@ -40,7 +42,13 @@ func SetSSEHeaders(w http.ResponseWriter) {
 
 func NewSSEEmitter(w http.ResponseWriter, requestID string, model string, inputTokens int, sessionID string) *SSEEmitter {
 	_ = sessionID
-	return &SSEEmitter{w: w, requestID: requestID, model: model, inputTokens: inputTokens}
+	return &SSEEmitter{
+		w:                       w,
+		requestID:               requestID,
+		model:                   model,
+		inputTokens:             inputTokens,
+		enableThinkingSignature: strings.HasPrefix(strings.TrimSpace(model), "claude-"),
+	}
 }
 
 func (e *SSEEmitter) Start() error {
@@ -67,17 +75,19 @@ func (e *SSEEmitter) Start() error {
 func (e *SSEEmitter) SetSignature(signature string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if !e.enableThinkingSignature {
+		return nil
+	}
+	s := strings.TrimSpace(signature)
+	if s != "" {
+		e.pendingThinkingSignature = s
+	}
 	return nil
 }
 
 func (e *SSEEmitter) ProcessPart(part StreamDataPart) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-
-	if part.ThoughtSignature != "" {
-		// Keep the latest signature so we can bind it to the upcoming tool_use id.
-		e.pendingSignature = part.ThoughtSignature
-	}
 
 	if part.Thought {
 		return e.sendThinkingLocked(part.Text)
@@ -86,13 +96,7 @@ func (e *SSEEmitter) ProcessPart(part StreamDataPart) error {
 		return e.sendTextLocked(part.Text)
 	}
 	if part.FunctionCall != nil {
-		sig := part.ThoughtSignature
-		if sig == "" {
-			sig = e.pendingSignature
-		}
-		// Consume the pending signature once it is bound to a tool_use id.
-		e.pendingSignature = ""
-		return e.sendToolCallLocked(part.FunctionCall, sig)
+		return e.sendToolCallLocked(part.FunctionCall, part.ThoughtSignature)
 	}
 	return nil
 }
@@ -101,17 +105,25 @@ func (e *SSEEmitter) Finish(outputTokens int, stopReason string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	// If the stream ends while a thinking block is open (no tool call consumed the signature),
+	// flush signature to the thinking block so clients can reconstruct it.
+	if e.thinkingBlockIndex != nil && e.enableThinkingSignature && e.pendingThinkingSignature != "" {
+		_ = e.sendSignatureDeltaLocked(*e.thinkingBlockIndex, e.pendingThinkingSignature)
+		e.pendingThinkingSignature = ""
+	}
 	_ = e.closeThinkingBlockLocked()
 	_ = e.closeTextBlockLocked()
 
-	if outputTokens > 0 {
-		_ = e.writeSSE("message_delta", map[string]any{
-			"type": "message_delta",
-			"usage": map[string]any{
-				"output_tokens": outputTokens,
-			},
-		})
-	}
+	_ = e.writeSSE("message_delta", map[string]any{
+		"type": "message_delta",
+		"delta": map[string]any{
+			"stop_reason":   stopReason,
+			"stop_sequence": nil,
+		},
+		"usage": map[string]any{
+			"output_tokens": outputTokens,
+		},
+	})
 
 	return e.writeSSE("message_stop", map[string]any{"type": "message_stop"})
 }
@@ -219,6 +231,11 @@ func (e *SSEEmitter) ensureThinkingBlock() error {
 }
 
 func (e *SSEEmitter) sendTextLocked(text string) error {
+	// If we're switching away from a thinking block (to text), flush signature to the thinking block.
+	if e.thinkingBlockIndex != nil && e.enableThinkingSignature && e.pendingThinkingSignature != "" {
+		_ = e.sendSignatureDeltaLocked(*e.thinkingBlockIndex, e.pendingThinkingSignature)
+		e.pendingThinkingSignature = ""
+	}
 	_ = e.closeThinkingBlockLocked()
 	if err := e.ensureTextBlock(); err != nil {
 		return err
@@ -256,8 +273,15 @@ func (e *SSEEmitter) sendToolCallLocked(fc *vertex.FunctionCall, thoughtSignatur
 	if err := e.writeSSE("content_block_start", map[string]any{"type": "content_block_start", "index": idx, "content_block": block}); err != nil {
 		return err
 	}
-	if thoughtSignature != "" {
-		signature.GetManager().Save(e.requestID, fc.ID, thoughtSignature, e.model)
+	sig := strings.TrimSpace(thoughtSignature)
+	if sig == "" {
+		sig = e.pendingThinkingSignature
+	}
+	if sig != "" {
+		signature.GetManager().Save(e.requestID, fc.ID, sig, e.model)
+		// Bind the signature to this functionCall; do not attach it to thinking blocks.
+		// Keep pendingThinkingSignature so multiple tool calls in the same turn can reuse it
+		// unless a new signature arrives.
 	}
 	return e.writeSSE("content_block_stop", map[string]any{"type": "content_block_stop", "index": idx})
 }
@@ -280,9 +304,15 @@ func (e *SSEEmitter) closeTextBlockLocked() error {
 	return e.writeSSE("content_block_stop", map[string]any{"type": "content_block_stop", "index": idx})
 }
 
-func (e *SSEEmitter) sendSignatureDeltaLocked(signature string) error {
-	_ = signature
-	return nil
+func (e *SSEEmitter) sendSignatureDeltaLocked(index int, signature string) error {
+	if signature == "" {
+		return nil
+	}
+	return e.writeSSE("content_block_delta", map[string]any{
+		"type":  "content_block_delta",
+		"index": index,
+		"delta": map[string]any{"type": "signature_delta", "signature": signature},
+	})
 }
 
 func (e *SSEEmitter) writeSSE(event string, data any) error {

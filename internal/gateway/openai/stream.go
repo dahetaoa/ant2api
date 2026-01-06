@@ -3,6 +3,7 @@ package openai
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"unicode/utf8"
 
@@ -30,6 +31,7 @@ type StreamWriter struct {
 	reasoningBuf    []byte
 	toolCalls       []ToolCall
 	collectedEvents []map[string]any
+	pendingSig      string
 	mu              sync.Mutex
 }
 
@@ -55,6 +57,12 @@ func (sw *StreamWriter) ProcessPart(part StreamDataPart) error {
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
 
+	isClaudeThinking := strings.HasPrefix(strings.TrimSpace(sw.model), "claude-") && strings.HasSuffix(strings.TrimSpace(sw.model), "-thinking")
+	if isClaudeThinking && part.Thought && part.ThoughtSignature != "" {
+		// Claude thinking: bind the signature to the first tool call that follows this signature block.
+		sw.pendingSig = part.ThoughtSignature
+	}
+
 	if part.Thought {
 		return sw.writeReasoningLocked(part.Text)
 	}
@@ -66,9 +74,15 @@ func (sw *StreamWriter) ProcessPart(part StreamDataPart) error {
 		if toolCallID == "" {
 			toolCallID = id.ToolCallID()
 		}
-		extra := (*ToolExtra)(nil)
-		if part.ThoughtSignature != "" {
-			extra = &ToolExtra{Google: &GoogleExtra{ThoughtSignature: part.ThoughtSignature}}
+
+		if isClaudeThinking {
+			if sw.pendingSig != "" {
+				signature.GetManager().Save(sw.requestID, toolCallID, sw.pendingSig, sw.model)
+				sw.pendingSig = ""
+			} else if part.ThoughtSignature != "" {
+				signature.GetManager().Save(sw.requestID, toolCallID, part.ThoughtSignature, sw.model)
+			}
+		} else if part.ThoughtSignature != "" {
 			signature.GetManager().Save(sw.requestID, toolCallID, part.ThoughtSignature, sw.model)
 		}
 		args := "{}"
@@ -77,7 +91,9 @@ func (sw *StreamWriter) ProcessPart(part StreamDataPart) error {
 				args = s
 			}
 		}
-		sw.toolCalls = append(sw.toolCalls, ToolCall{ID: toolCallID, Type: "function", Function: FunctionCall{Name: part.FunctionCall.Name, Arguments: args}, ExtraContent: extra})
+		idx := len(sw.toolCalls)
+		idxCopy := idx
+		sw.toolCalls = append(sw.toolCalls, ToolCall{Index: &idxCopy, ID: toolCallID, Type: "function", Function: FunctionCall{Name: part.FunctionCall.Name, Arguments: args}})
 	}
 	return nil
 }

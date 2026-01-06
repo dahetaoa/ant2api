@@ -1,6 +1,8 @@
 package claude
 
 import (
+	"strings"
+
 	"anti2api-golang/refactor/internal/pkg/id"
 	sigpkg "anti2api-golang/refactor/internal/signature"
 	"anti2api-golang/refactor/internal/vertex"
@@ -50,10 +52,12 @@ func ToMessagesResponse(resp *vertex.Response, requestID string, model string, i
 	var thinking string
 	var thinkingSignature string
 	var toolUses []ContentBlock
-	var pendingSignature string
 
 	sigMgr := sigpkg.GetManager()
 	for _, p := range parts {
+		if strings.HasPrefix(strings.TrimSpace(model), "claude-") && p.Thought && p.ThoughtSignature != "" {
+			thinkingSignature = p.ThoughtSignature
+		}
 		if p.Thought {
 			thinking += p.Text
 			continue
@@ -62,22 +66,18 @@ func ToMessagesResponse(resp *vertex.Response, requestID string, model string, i
 			text += p.Text
 			continue
 		}
-		if p.ThoughtSignature != "" {
-			thinkingSignature = p.ThoughtSignature
-			pendingSignature = p.ThoughtSignature
-		}
 		if p.FunctionCall != nil {
 			idv := p.FunctionCall.ID
 			if idv == "" {
 				idv = "toolu_" + id.RequestID()
 			}
-			sig := p.ThoughtSignature
-			if sig == "" {
-				sig = pendingSignature
+			sig := strings.TrimSpace(p.ThoughtSignature)
+			if sig == "" && strings.HasPrefix(strings.TrimSpace(model), "claude-") {
+				// Claude signatures may arrive on the thinking part (not on the functionCall part).
+				sig = thinkingSignature
 			}
 			if sig != "" {
 				sigMgr.Save(requestID, idv, sig, model)
-				pendingSignature = ""
 			}
 			toolUses = append(toolUses, ContentBlock{Type: "tool_use", ID: idv, Name: p.FunctionCall.Name, Input: p.FunctionCall.Args})
 			out.StopReason = "tool_use"
@@ -85,7 +85,7 @@ func ToMessagesResponse(resp *vertex.Response, requestID string, model string, i
 	}
 
 	blocks := make([]ContentBlock, 0, 2+len(toolUses))
-	if thinking != "" {
+	if thinking != "" || thinkingSignature != "" {
 		blocks = append(blocks, ContentBlock{Type: "thinking", Thinking: thinking, Signature: thinkingSignature})
 	}
 	if text != "" {

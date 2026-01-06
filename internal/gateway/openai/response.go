@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"strings"
 	"time"
 
 	"anti2api-golang/refactor/internal/pkg/id"
@@ -79,10 +80,16 @@ func ToChatCompletion(resp *vertex.Response, model string, requestID string, ses
 	var toolCalls []ToolCall
 
 	sigMgr := signature.GetManager()
+	isClaudeThinking := strings.HasPrefix(strings.TrimSpace(model), "claude-") && strings.HasSuffix(strings.TrimSpace(model), "-thinking")
+	pendingSig := ""
 
 	for _, p := range parts {
 		if p.Thought {
 			reasoning += p.Text
+			if isClaudeThinking && p.ThoughtSignature != "" {
+				// Claude thinking: bind this signature to the first subsequent tool call id.
+				pendingSig = p.ThoughtSignature
+			}
 			continue
 		}
 		if p.Text != "" {
@@ -95,13 +102,15 @@ func ToChatCompletion(resp *vertex.Response, model string, requestID string, ses
 				tcID = id.ToolCallID()
 			}
 
-			if p.ThoughtSignature != "" {
+			if isClaudeThinking {
+				if pendingSig != "" {
+					sigMgr.Save(requestID, tcID, pendingSig, model)
+					pendingSig = ""
+				} else if p.ThoughtSignature != "" {
+					sigMgr.Save(requestID, tcID, p.ThoughtSignature, model)
+				}
+			} else if p.ThoughtSignature != "" {
 				sigMgr.Save(requestID, tcID, p.ThoughtSignature, model)
-			}
-
-			extra := (*ToolExtra)(nil)
-			if p.ThoughtSignature != "" {
-				extra = &ToolExtra{Google: &GoogleExtra{ThoughtSignature: p.ThoughtSignature}}
 			}
 
 			args := "{}"
@@ -118,7 +127,6 @@ func ToChatCompletion(resp *vertex.Response, model string, requestID string, ses
 					Name:      p.FunctionCall.Name,
 					Arguments: args,
 				},
-				ExtraContent: extra,
 			})
 		}
 	}

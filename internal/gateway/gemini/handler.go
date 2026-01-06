@@ -48,19 +48,85 @@ type GeminiResponse struct {
 	UsageMetadata *vertex.UsageMetadata `json:"usageMetadata,omitempty"`
 }
 
-func toVertexGenerationConfig(cfg *GeminiGenerationConfig) *vertex.GenerationConfig {
+func toVertexGenerationConfig(model string, cfg *GeminiGenerationConfig) *vertex.GenerationConfig {
+	model = strings.TrimSpace(model)
+	isClaude := strings.HasPrefix(model, "claude-")
+	isGemini3 := strings.HasPrefix(model, "gemini-3-") || strings.HasPrefix(model, "gemini-3")
+	isGemini := strings.HasPrefix(model, "gemini-")
+
 	if cfg == nil {
+		if isClaude {
+			return &vertex.GenerationConfig{CandidateCount: 1, MaxOutputTokens: 64000}
+		}
+		if isGemini {
+			return &vertex.GenerationConfig{CandidateCount: 1, MaxOutputTokens: 65535}
+		}
 		return nil
 	}
 	out := &vertex.GenerationConfig{CandidateCount: cfg.CandidateCount, StopSequences: cfg.StopSequences, MaxOutputTokens: cfg.MaxOutputTokens, TopK: cfg.TopK}
 	out.Temperature = cfg.Temperature
 	out.TopP = cfg.TopP
 	if cfg.ThinkingConfig != nil {
-		out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: cfg.ThinkingConfig.IncludeThoughts, ThinkingBudget: cfg.ThinkingConfig.ThinkingBudget}
-		if cfg.ThinkingConfig.ThinkingLevel != "" {
-			out.ThinkingConfig.ThinkingLevel = strings.ToLower(cfg.ThinkingConfig.ThinkingLevel)
+		out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: cfg.ThinkingConfig.IncludeThoughts, ThinkingBudget: cfg.ThinkingConfig.ThinkingBudget, ThinkingLevel: cfg.ThinkingConfig.ThinkingLevel}
+	}
+
+	// Gemini 3 models: always use thinking_level=high when thinking is requested.
+	if isGemini3 && out.ThinkingConfig != nil && out.ThinkingConfig.IncludeThoughts {
+		out.ThinkingConfig.ThinkingLevel = "high"
+		out.ThinkingConfig.ThinkingBudget = 0
+	}
+
+	// Claude thinking models require a non-zero thinkingBudget to output thoughts.
+	if isClaude && out.ThinkingConfig != nil && out.ThinkingConfig.IncludeThoughts {
+		out.ThinkingConfig.ThinkingLevel = ""
+		if out.ThinkingConfig.ThinkingBudget <= 0 {
+			out.ThinkingConfig.ThinkingBudget = 32000
 		}
 	}
+
+	// Claude models: maxOutputTokens is fixed at 64000.
+	if isClaude {
+		out.MaxOutputTokens = 64000
+	}
+	// Gemini models: maxOutputTokens is fixed at 65535.
+	if isGemini {
+		out.MaxOutputTokens = 65535
+	}
+
+	// When thinkingBudget is used, ensure it's compatible with maxOutputTokens.
+	if out.ThinkingConfig != nil && out.ThinkingConfig.IncludeThoughts {
+		if out.MaxOutputTokens <= 0 {
+			if isClaude {
+				out.MaxOutputTokens = 64000
+			} else if isGemini {
+				out.MaxOutputTokens = 65535
+			} else if out.ThinkingConfig.ThinkingBudget > 0 {
+				out.MaxOutputTokens = out.ThinkingConfig.ThinkingBudget + 4096
+			} else {
+				out.MaxOutputTokens = 8192
+			}
+		}
+		if out.ThinkingConfig.ThinkingBudget > 0 {
+			if isClaude {
+				maxBudget := out.MaxOutputTokens - 1024
+				if maxBudget < 1024 {
+					maxBudget = 1024
+				}
+				if out.ThinkingConfig.ThinkingBudget > maxBudget {
+					out.ThinkingConfig.ThinkingBudget = maxBudget
+				}
+			} else if isGemini && out.MaxOutputTokens <= out.ThinkingConfig.ThinkingBudget {
+				maxBudget := out.MaxOutputTokens - 1024
+				if maxBudget < 1024 {
+					maxBudget = 1024
+				}
+				out.ThinkingConfig.ThinkingBudget = maxBudget
+			} else if out.MaxOutputTokens <= out.ThinkingConfig.ThinkingBudget {
+				out.MaxOutputTokens = out.ThinkingConfig.ThinkingBudget + 4096
+			}
+		}
+	}
+
 	return out
 }
 
@@ -272,7 +338,7 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 		Request: vertex.InnerReq{
 			Contents:          sanitizeContents(req.Contents),
 			SystemInstruction: req.SystemInstruction,
-			GenerationConfig:  toVertexGenerationConfig(req.GenerationConfig),
+			GenerationConfig:  toVertexGenerationConfig(model, req.GenerationConfig),
 			Tools:             req.Tools,
 			ToolConfig:        req.ToolConfig,
 			SessionID:         acc.SessionID,
@@ -341,7 +407,7 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 		Request: vertex.InnerReq{
 			Contents:          sanitizeContents(req.Contents),
 			SystemInstruction: req.SystemInstruction,
-			GenerationConfig:  toVertexGenerationConfig(req.GenerationConfig),
+			GenerationConfig:  toVertexGenerationConfig(model, req.GenerationConfig),
 			Tools:             req.Tools,
 			ToolConfig:        req.ToolConfig,
 			SessionID:         acc.SessionID,

@@ -104,7 +104,8 @@ func handleStream(w http.ResponseWriter, r *http.Request, req *MessagesRequest, 
 		}
 		c := data.Response.Candidates[0]
 		for _, p := range c.Content.Parts {
-			if p.ThoughtSignature != "" {
+			// Claude extended thinking signatures belong to thinking blocks (not tool_use).
+			if p.Thought && p.ThoughtSignature != "" {
 				_ = emitter.SetSignature(p.ThoughtSignature)
 			}
 		}

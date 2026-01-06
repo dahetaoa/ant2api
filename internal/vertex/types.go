@@ -33,15 +33,15 @@ type Part struct {
 }
 
 type FunctionCall struct {
-	ID   string                 `json:"id,omitempty"`
-	Name string                 `json:"name"`
-	Args map[string]any         `json:"args"`
+	ID   string         `json:"id,omitempty"`
+	Name string         `json:"name"`
+	Args map[string]any `json:"args"`
 }
 
 type FunctionResponse struct {
-	ID       string            `json:"id,omitempty"`
-	Name     string            `json:"name"`
-	Response map[string]any    `json:"response"`
+	ID       string         `json:"id,omitempty"`
+	Name     string         `json:"name"`
+	Response map[string]any `json:"response"`
 }
 
 type InlineData struct {
@@ -85,7 +85,7 @@ type GenerationConfig struct {
 type ThinkingConfig struct {
 	IncludeThoughts bool   `json:"includeThoughts"`
 	ThinkingBudget  int    `json:"thinkingBudget,omitempty"`
-	ThinkingLevel   string `json:"thinking_level,omitempty"`
+	ThinkingLevel   string `json:"thinkingLevel,omitempty"`
 }
 
 type Response struct {
@@ -107,4 +107,3 @@ type UsageMetadata struct {
 	TotalTokenCount      int `json:"totalTokenCount"`
 	ThoughtsTokenCount   int `json:"thoughtsTokenCount,omitempty"`
 }
-

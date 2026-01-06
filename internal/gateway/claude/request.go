@@ -52,7 +52,8 @@ type Tool struct {
 
 type Thinking struct {
 	Type   string `json:"type"`
-	Budget int    `json:"budget,omitempty"`
+	// Anthropic clients typically send budget_tokens. Accept both.
+	Budget       int `json:"budget,omitempty"`
+	BudgetTokens int `json:"budget_tokens,omitempty"`
 	Level  string `json:"thinking_level,omitempty"`
 }
-

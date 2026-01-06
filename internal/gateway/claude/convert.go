@@ -23,6 +23,8 @@ func ToVertexRequest(req *MessagesRequest, account *AccountContext) (*vertex.Req
 		return nil, "", errors.New("messages is required")
 	}
 
+	isClaudeModel := strings.HasPrefix(strings.TrimSpace(req.Model), "claude-")
+
 	requestID := id.RequestID()
 	vreq := &vertex.Request{
 		Project:   account.ProjectID,
@@ -44,13 +46,33 @@ func ToVertexRequest(req *MessagesRequest, account *AccountContext) (*vertex.Req
 	}
 
 	vreq.Request.GenerationConfig = buildGenerationConfig(req)
-	vreq.Request.Contents = toVertexContents(req.Messages)
+	contents, err := toVertexContents(req.Messages, isClaudeModel)
+	if err != nil {
+		return nil, "", err
+	}
+	vreq.Request.Contents = contents
 
 	return vreq, requestID, nil
 }
 
 func buildGenerationConfig(req *MessagesRequest) *vertex.GenerationConfig {
-	cfg := &vertex.GenerationConfig{CandidateCount: 1, MaxOutputTokens: req.MaxTokens}
+	model := strings.TrimSpace(req.Model)
+	isClaude := strings.HasPrefix(model, "claude-")
+	isGemini := strings.HasPrefix(model, "gemini-")
+	isGemini3 := strings.HasPrefix(model, "gemini-3-") || strings.HasPrefix(model, "gemini-3")
+
+	cfg := &vertex.GenerationConfig{CandidateCount: 1}
+	// Claude models: maxOutputTokens is fixed at 64000.
+	if isClaude {
+		cfg.MaxOutputTokens = 64000
+	} else if isGemini {
+		// Gemini models: maxOutputTokens is fixed at 65535.
+		cfg.MaxOutputTokens = 65535
+	} else if req.MaxTokens > 0 {
+		cfg.MaxOutputTokens = req.MaxTokens
+	} else {
+		cfg.MaxOutputTokens = 8192
+	}
 	if req.Temperature != nil {
 		cfg.Temperature = req.Temperature
 	}
@@ -63,37 +85,69 @@ func buildGenerationConfig(req *MessagesRequest) *vertex.GenerationConfig {
 
 	if req.Thinking != nil && strings.ToLower(req.Thinking.Type) == "enabled" {
 		cfg.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true}
-		if req.Thinking.Budget > 0 {
-			cfg.ThinkingConfig.ThinkingBudget = req.Thinking.Budget
-		}
-		if req.Thinking.Level != "" {
-			cfg.ThinkingConfig.ThinkingLevel = req.Thinking.Level
+		if isClaude {
+			// Claude thinking models require a non-zero thinkingBudget to output thoughts.
+			budget := req.Thinking.Budget
+			if budget <= 0 {
+				budget = req.Thinking.BudgetTokens
+			}
+			if budget <= 0 {
+				budget = 32000
+			}
+			cfg.ThinkingConfig.ThinkingBudget = budget
+		} else if isGemini3 {
+			// Gemini 3 models: always use thinking_level=high when thinking is requested.
+			cfg.ThinkingConfig.ThinkingLevel = "high"
 			cfg.ThinkingConfig.ThinkingBudget = 0
+		} else {
+			budget := req.Thinking.Budget
+			if budget <= 0 {
+				budget = req.Thinking.BudgetTokens
+			}
+			if budget > 0 {
+				cfg.ThinkingConfig.ThinkingBudget = budget
+			}
+		}
+	}
+
+	if cfg.ThinkingConfig != nil && cfg.ThinkingConfig.ThinkingBudget > 0 {
+		maxBudget := cfg.MaxOutputTokens - 1024
+		if maxBudget < 1024 {
+			maxBudget = 1024
+		}
+		if cfg.ThinkingConfig.ThinkingBudget > maxBudget {
+			cfg.ThinkingConfig.ThinkingBudget = maxBudget
 		}
 	}
 	return cfg
 }
 
-func toVertexContents(messages []Message) []vertex.Content {
+func toVertexContents(messages []Message, isClaudeModel bool) ([]vertex.Content, error) {
 	var out []vertex.Content
 	for _, m := range messages {
 		switch m.Role {
 		case "user":
-			parts := extractContentParts(m.Content, out)
+			parts, err := extractContentParts(m.Content, out, isClaudeModel)
+			if err != nil {
+				return nil, err
+			}
 			if len(parts) > 0 {
 				out = append(out, vertex.Content{Role: "user", Parts: parts})
 			}
 		case "assistant":
-			parts := extractContentParts(m.Content, out)
+			parts, err := extractContentParts(m.Content, out, isClaudeModel)
+			if err != nil {
+				return nil, err
+			}
 			if len(parts) > 0 {
 				out = append(out, vertex.Content{Role: "model", Parts: parts})
 			}
 		}
 	}
-	return out
+	return out, nil
 }
 
-func extractContentParts(content any, contentsSoFar []vertex.Content) []vertex.Part {
+func extractContentParts(content any, contentsSoFar []vertex.Content, isClaudeModel bool) ([]vertex.Part, error) {
 	var out []vertex.Part
 	switch v := content.(type) {
 	case string:
@@ -114,8 +168,30 @@ func extractContentParts(content any, contentsSoFar []vertex.Content) []vertex.P
 				}
 			case "thinking":
 				thinking, _ := m["thinking"].(string)
-				// Ignore client-provided signature; signatures are managed by tool_use id indexing.
+				sig, _ := m["signature"].(string)
+				sig = strings.TrimSpace(sig)
+				if isClaudeModel {
+					if sig == "" {
+						return nil, errors.New("Claude thinking blocks must include signature (extended thinking)")
+					}
+					out = append(out, vertex.Part{Text: thinking, Thought: true, ThoughtSignature: sig})
+					continue
+				}
 				out = append(out, vertex.Part{Text: thinking, Thought: true})
+			case "redacted_thinking":
+				// Claude may return redacted thinking blocks which must be preserved and passed back.
+				data, _ := m["data"].(string)
+				data = strings.TrimSpace(data)
+				if isClaudeModel {
+					if data == "" {
+						return nil, errors.New("Claude redacted_thinking blocks must include data (extended thinking)")
+					}
+					// Cloud Code uses thoughtSignature as the opaque verification payload.
+					// Keep text empty; the backend will decrypt using the opaque field.
+					out = append(out, vertex.Part{Text: "", Thought: true, ThoughtSignature: data})
+					continue
+				}
+				out = append(out, vertex.Part{Text: "", Thought: true})
 			case "tool_use":
 				idv, _ := m["id"].(string)
 				if idv == "" {
@@ -134,19 +210,19 @@ func extractContentParts(content any, contentsSoFar []vertex.Content) []vertex.P
 				toolUseID = strings.TrimSpace(toolUseID)
 				if toolUseID == "" {
 					// Preserve request semantics: a tool_result must reference a prior tool_use.
-					return out
+					return out, nil
 				}
 				name := findFunctionName(contentsSoFar, toolUseID)
 				name = strings.TrimSpace(name)
 				if name == "" {
-					return out
+					return out, nil
 				}
 				resultText := extractToolResultContent(m["content"])
 				out = append(out, vertex.Part{FunctionResponse: &vertex.FunctionResponse{ID: toolUseID, Name: name, Response: map[string]any{"output": resultText}}})
 			}
 		}
 	}
-	return out
+	return out, nil
 }
 
 func extractToolResultContent(content any) string {
@@ -216,7 +292,8 @@ func extractSystem(system any) string {
 func toVertexTools(tools []Tool) []vertex.Tool {
 	var out []vertex.Tool
 	for _, t := range tools {
-		out = append(out, vertex.Tool{FunctionDeclarations: []vertex.FunctionDeclaration{{Name: t.Name, Description: t.Description, Parameters: t.InputSchema}}})
+		params := vertex.SanitizeFunctionParametersSchema(t.InputSchema)
+		out = append(out, vertex.Tool{FunctionDeclarations: []vertex.FunctionDeclaration{{Name: t.Name, Description: t.Description, Parameters: params}}})
 	}
 	return out
 }
