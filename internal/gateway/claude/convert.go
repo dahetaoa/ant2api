@@ -155,7 +155,8 @@ func extractContentParts(content any, contentsSoFar []vertex.Content, isClaudeMo
 			out = append(out, vertex.Part{Text: v})
 		}
 	case []any:
-		for _, it := range v {
+		for i := 0; i < len(v); i++ {
+			it := v[i]
 			m, ok := it.(map[string]any)
 			if !ok {
 				continue
@@ -171,8 +172,34 @@ func extractContentParts(content any, contentsSoFar []vertex.Content, isClaudeMo
 				sig, _ := m["signature"].(string)
 				sig = strings.TrimSpace(sig)
 				if isClaudeModel {
+					// Some clients do not persist/return the thinking signature. Best-effort recovery:
+					// - If a tool_use follows in the same assistant content, look up its cached signature.
+					// - Otherwise, drop the thinking block to avoid sending invalid extended thinking history.
 					if sig == "" {
-						return nil, errors.New("Claude thinking blocks must include signature (extended thinking)")
+						var toolUseID string
+						for j := i + 1; j < len(v); j++ {
+							m2, ok2 := v[j].(map[string]any)
+							if !ok2 {
+								continue
+							}
+							if t2, _ := m2["type"].(string); t2 != "tool_use" {
+								continue
+							}
+							idv, _ := m2["id"].(string)
+							idv = strings.TrimSpace(idv)
+							if idv != "" {
+								toolUseID = idv
+								break
+							}
+						}
+						if toolUseID != "" {
+							if s, ok := signature.GetManager().LookupByToolCallID(toolUseID); ok {
+								sig = strings.TrimSpace(s)
+							}
+						}
+					}
+					if sig == "" {
+						continue
 					}
 					out = append(out, vertex.Part{Text: thinking, Thought: true, ThoughtSignature: sig})
 					continue
@@ -183,8 +210,32 @@ func extractContentParts(content any, contentsSoFar []vertex.Content, isClaudeMo
 				data, _ := m["data"].(string)
 				data = strings.TrimSpace(data)
 				if isClaudeModel {
+					// Some clients may drop the opaque redacted payload; try to recover from a tool_use id.
 					if data == "" {
-						return nil, errors.New("Claude redacted_thinking blocks must include data (extended thinking)")
+						var toolUseID string
+						for j := i + 1; j < len(v); j++ {
+							m2, ok2 := v[j].(map[string]any)
+							if !ok2 {
+								continue
+							}
+							if t2, _ := m2["type"].(string); t2 != "tool_use" {
+								continue
+							}
+							idv, _ := m2["id"].(string)
+							idv = strings.TrimSpace(idv)
+							if idv != "" {
+								toolUseID = idv
+								break
+							}
+						}
+						if toolUseID != "" {
+							if s, ok := signature.GetManager().LookupByToolCallID(toolUseID); ok {
+								data = strings.TrimSpace(s)
+							}
+						}
+					}
+					if data == "" {
+						continue
 					}
 					// Cloud Code uses thoughtSignature as the opaque verification payload.
 					// Keep text empty; the backend will decrypt using the opaque field.
@@ -192,24 +243,28 @@ func extractContentParts(content any, contentsSoFar []vertex.Content, isClaudeMo
 					continue
 				}
 				out = append(out, vertex.Part{Text: "", Thought: true})
-			case "tool_use":
-				idv, _ := m["id"].(string)
-				if idv == "" {
-					idv = id.ToolCallID()
-				}
-				name, _ := m["name"].(string)
-				input, _ := m["input"].(map[string]any)
-				// Ignore client-provided signature; only tool_call_id based lookup.
-				sig := ""
-				if s, ok := signature.GetManager().LookupByToolCallID(idv); ok {
-					sig = s
-				}
-				out = append(out, vertex.Part{FunctionCall: &vertex.FunctionCall{ID: idv, Name: name, Args: input}, ThoughtSignature: sig})
-			case "tool_result":
-				toolUseID, _ := m["tool_use_id"].(string)
-				toolUseID = strings.TrimSpace(toolUseID)
-				if toolUseID == "" {
-					// Preserve request semantics: a tool_result must reference a prior tool_use.
+				case "tool_use":
+					idv, _ := m["id"].(string)
+					if idv == "" {
+						idv = id.ToolCallID()
+					}
+					name, _ := m["name"].(string)
+					input, _ := m["input"].(map[string]any)
+					// For Claude models, thoughtSignature should live on the thinking block only.
+					// Do NOT attach it to tool_use/functionCall parts.
+					sig := ""
+					if !isClaudeModel {
+						// Ignore client-provided signature; only tool_call_id based lookup.
+						if s, ok := signature.GetManager().LookupByToolCallID(idv); ok {
+							sig = s
+						}
+					}
+					out = append(out, vertex.Part{FunctionCall: &vertex.FunctionCall{ID: idv, Name: name, Args: input}, ThoughtSignature: sig})
+				case "tool_result":
+					toolUseID, _ := m["tool_use_id"].(string)
+					toolUseID = strings.TrimSpace(toolUseID)
+					if toolUseID == "" {
+						// Preserve request semantics: a tool_result must reference a prior tool_use.
 					return out, nil
 				}
 				name := findFunctionName(contentsSoFar, toolUseID)
