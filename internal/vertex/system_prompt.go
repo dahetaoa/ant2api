@@ -8,8 +8,7 @@ This information may or may not be relevant to the coding task, it is up for you
 </identity>
 
 <ephemeral_message>
-There will be an <EPHEMERAL_MESSAGE> appearing in the conversation at times. This is not coming from the user, but instead injected by the system as important information to pay attention to. 
-Do not respond to nor acknowledge those messages, but do follow them strictly.
+
 </ephemeral_message>
 
 <communication_style>
