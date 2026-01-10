@@ -344,11 +344,17 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 			SessionID:         acc.SessionID,
 		},
 	}
+	vreq.RequestType = "agent"
+	vreq.UserAgent = "antigravity"
 	if sid := strings.TrimSpace(r.Header.Get("X-Session-ID")); sid != "" {
 		vreq.Request.SessionID = sid
 	}
 	if rid := strings.TrimSpace(r.Header.Get("X-Request-ID")); rid != "" {
 		vreq.RequestID = rid
+	}
+	vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+	if vreq.Request.SystemInstruction != nil && vreq.Request.SystemInstruction.Role == "" {
+		vreq.Request.SystemInstruction.Role = "user"
 	}
 
 	startTime := time.Now()
@@ -413,11 +419,17 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 			SessionID:         acc.SessionID,
 		},
 	}
+	vreq.RequestType = "agent"
+	vreq.UserAgent = "antigravity"
 	if sid := strings.TrimSpace(r.Header.Get("X-Session-ID")); sid != "" {
 		vreq.Request.SessionID = sid
 	}
 	if rid := strings.TrimSpace(r.Header.Get("X-Request-ID")); rid != "" {
 		vreq.RequestID = rid
+	}
+	vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+	if vreq.Request.SystemInstruction != nil && vreq.Request.SystemInstruction.Role == "" {
+		vreq.Request.SystemInstruction.Role = "user"
 	}
 
 	startTime := time.Now()

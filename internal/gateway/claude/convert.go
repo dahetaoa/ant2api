@@ -35,9 +35,11 @@ func ToVertexRequest(req *MessagesRequest, account *AccountContext) (*vertex.Req
 			SessionID: account.SessionID,
 		},
 	}
+	vreq.RequestType = "agent"
+	vreq.UserAgent = "antigravity"
 
 	if sys := extractSystem(req.System); sys != "" {
-		vreq.Request.SystemInstruction = &vertex.SystemInstruction{Parts: []vertex.Part{{Text: sys}}}
+		vreq.Request.SystemInstruction = &vertex.SystemInstruction{Role: "user", Parts: []vertex.Part{{Text: sys}}}
 	}
 
 	if len(req.Tools) > 0 {
@@ -51,6 +53,7 @@ func ToVertexRequest(req *MessagesRequest, account *AccountContext) (*vertex.Req
 		return nil, "", err
 	}
 	vreq.Request.Contents = contents
+	vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
 
 	return vreq, requestID, nil
 }
@@ -243,28 +246,28 @@ func extractContentParts(content any, contentsSoFar []vertex.Content, isClaudeMo
 					continue
 				}
 				out = append(out, vertex.Part{Text: "", Thought: true})
-				case "tool_use":
-					idv, _ := m["id"].(string)
-					if idv == "" {
-						idv = id.ToolCallID()
+			case "tool_use":
+				idv, _ := m["id"].(string)
+				if idv == "" {
+					idv = id.ToolCallID()
+				}
+				name, _ := m["name"].(string)
+				input, _ := m["input"].(map[string]any)
+				// For Claude models, thoughtSignature should live on the thinking block only.
+				// Do NOT attach it to tool_use/functionCall parts.
+				sig := ""
+				if !isClaudeModel {
+					// Ignore client-provided signature; only tool_call_id based lookup.
+					if s, ok := signature.GetManager().LookupByToolCallID(idv); ok {
+						sig = s
 					}
-					name, _ := m["name"].(string)
-					input, _ := m["input"].(map[string]any)
-					// For Claude models, thoughtSignature should live on the thinking block only.
-					// Do NOT attach it to tool_use/functionCall parts.
-					sig := ""
-					if !isClaudeModel {
-						// Ignore client-provided signature; only tool_call_id based lookup.
-						if s, ok := signature.GetManager().LookupByToolCallID(idv); ok {
-							sig = s
-						}
-					}
-					out = append(out, vertex.Part{FunctionCall: &vertex.FunctionCall{ID: idv, Name: name, Args: input}, ThoughtSignature: sig})
-				case "tool_result":
-					toolUseID, _ := m["tool_use_id"].(string)
-					toolUseID = strings.TrimSpace(toolUseID)
-					if toolUseID == "" {
-						// Preserve request semantics: a tool_result must reference a prior tool_use.
+				}
+				out = append(out, vertex.Part{FunctionCall: &vertex.FunctionCall{ID: idv, Name: name, Args: input}, ThoughtSignature: sig})
+			case "tool_result":
+				toolUseID, _ := m["tool_use_id"].(string)
+				toolUseID = strings.TrimSpace(toolUseID)
+				if toolUseID == "" {
+					// Preserve request semantics: a tool_result must reference a prior tool_use.
 					return out, nil
 				}
 				name := findFunctionName(contentsSoFar, toolUseID)

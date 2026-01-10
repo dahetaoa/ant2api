@@ -3,10 +3,12 @@ package vertex
 // Request is the Vertex AI Cloud Code API wrapper request.
 // It matches the format used by antigravity Cloud Code endpoints.
 type Request struct {
-	Project   string   `json:"project"`
-	Model     string   `json:"model"`
-	RequestID string   `json:"requestId"`
-	Request   InnerReq `json:"request"`
+	Project     string   `json:"project"`
+	Model       string   `json:"model"`
+	RequestID   string   `json:"requestId"`
+	RequestType string   `json:"requestType,omitempty"`
+	UserAgent   string   `json:"userAgent,omitempty"`
+	Request     InnerReq `json:"request"`
 }
 
 type InnerReq struct {
@@ -50,6 +52,7 @@ type InlineData struct {
 }
 
 type SystemInstruction struct {
+	Role  string `json:"role,omitempty"`
 	Parts []Part `json:"parts"`
 }
 

@@ -24,9 +24,11 @@ func ToVertexRequest(req *ChatRequest, account *AccountContext) (*vertex.Request
 			SessionID: account.SessionID,
 		},
 	}
+	vreq.RequestType = "agent"
+	vreq.UserAgent = "antigravity"
 
 	if sys := extractSystem(req.Messages); sys != "" {
-		vreq.Request.SystemInstruction = &vertex.SystemInstruction{Parts: []vertex.Part{{Text: sys}}}
+		vreq.Request.SystemInstruction = &vertex.SystemInstruction{Role: "user", Parts: []vertex.Part{{Text: sys}}}
 	}
 
 	if len(req.Tools) > 0 {
@@ -36,6 +38,7 @@ func ToVertexRequest(req *ChatRequest, account *AccountContext) (*vertex.Request
 
 	vreq.Request.GenerationConfig = buildGenerationConfig(req)
 	vreq.Request.Contents = vertex.SanitizeContents(toVertexContents(req, requestID))
+	vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
 
 	return vreq, requestID, nil
 }
