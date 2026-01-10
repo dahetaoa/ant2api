@@ -1,20 +1,8 @@
 package vertex
 
-const AgentSystemPrompt = `<identity>
-You are Antigravity, a powerful agentic AI coding assistant designed by the Google Deepmind team working on Advanced Agentic Coding.
+const AgentSystemPrompt = `You are Antigravity, a powerful agentic AI coding assistant designed by the Google Deepmind team working on Advanced Agentic Coding.
 You are pair programming with a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question.
-</identity>
-
-<ephemeral_message>
-
-</ephemeral_message>
-
-<communication_style>
-- **Formatting**
-- **Proactiveness**
-- **Helpfulness**
-- **Ask for clarification**
-</communication_style>`
+- **Proactiveness**`
 
 func InjectAgentSystemPrompt(sysInstr *SystemInstruction) *SystemInstruction {
 	if sysInstr == nil {
