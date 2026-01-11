@@ -196,8 +196,8 @@ func extractContentParts(content any, contentsSoFar []vertex.Content, isClaudeMo
 							}
 						}
 						if toolUseID != "" {
-							if s, ok := signature.GetManager().LookupByToolCallID(toolUseID); ok {
-								sig = strings.TrimSpace(s)
+							if e, ok := signature.GetManager().LookupByToolCallID(toolUseID); ok {
+								sig = strings.TrimSpace(e.Signature)
 							}
 						}
 					}
@@ -232,8 +232,8 @@ func extractContentParts(content any, contentsSoFar []vertex.Content, isClaudeMo
 							}
 						}
 						if toolUseID != "" {
-							if s, ok := signature.GetManager().LookupByToolCallID(toolUseID); ok {
-								data = strings.TrimSpace(s)
+							if e, ok := signature.GetManager().LookupByToolCallID(toolUseID); ok {
+								data = strings.TrimSpace(e.Signature)
 							}
 						}
 					}
@@ -258,8 +258,8 @@ func extractContentParts(content any, contentsSoFar []vertex.Content, isClaudeMo
 				sig := ""
 				if !isClaudeModel {
 					// Ignore client-provided signature; only tool_call_id based lookup.
-					if s, ok := signature.GetManager().LookupByToolCallID(idv); ok {
-						sig = s
+					if e, ok := signature.GetManager().LookupByToolCallID(idv); ok {
+						sig = e.Signature
 					}
 				}
 				out = append(out, vertex.Part{FunctionCall: &vertex.FunctionCall{ID: idv, Name: name, Args: input}, ThoughtSignature: sig})

@@ -82,10 +82,12 @@ func ToChatCompletion(resp *vertex.Response, model string, requestID string, ses
 	sigMgr := signature.GetManager()
 	isClaudeThinking := strings.HasPrefix(strings.TrimSpace(model), "claude-") && strings.HasSuffix(strings.TrimSpace(model), "-thinking")
 	pendingSig := ""
+	var pendingReasoning strings.Builder
 
 	for _, p := range parts {
 		if p.Thought {
 			reasoning += p.Text
+			pendingReasoning.WriteString(p.Text)
 			if isClaudeThinking && p.ThoughtSignature != "" {
 				// Claude thinking: bind this signature to the first subsequent tool call id.
 				pendingSig = p.ThoughtSignature
@@ -104,13 +106,16 @@ func ToChatCompletion(resp *vertex.Response, model string, requestID string, ses
 
 			if isClaudeThinking {
 				if pendingSig != "" {
-					sigMgr.Save(requestID, tcID, pendingSig, model)
+					sigMgr.Save(requestID, tcID, pendingSig, pendingReasoning.String(), model)
 					pendingSig = ""
+					pendingReasoning.Reset()
 				} else if p.ThoughtSignature != "" {
-					sigMgr.Save(requestID, tcID, p.ThoughtSignature, model)
+					sigMgr.Save(requestID, tcID, p.ThoughtSignature, pendingReasoning.String(), model)
+					pendingReasoning.Reset()
 				}
 			} else if p.ThoughtSignature != "" {
-				sigMgr.Save(requestID, tcID, p.ThoughtSignature, model)
+				sigMgr.Save(requestID, tcID, p.ThoughtSignature, pendingReasoning.String(), model)
+				pendingReasoning.Reset()
 			}
 
 			args := "{}"

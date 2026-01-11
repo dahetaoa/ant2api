@@ -77,7 +77,7 @@ func ToMessagesResponse(resp *vertex.Response, requestID string, model string, i
 				sig = thinkingSignature
 			}
 			if sig != "" {
-				sigMgr.Save(requestID, idv, sig, model)
+				sigMgr.Save(requestID, idv, sig, thinking, model)
 			}
 			toolUses = append(toolUses, ContentBlock{Type: "tool_use", ID: idv, Name: p.FunctionCall.Name, Input: p.FunctionCall.Args})
 			out.StopReason = "tool_use"

@@ -4,6 +4,7 @@ import "time"
 
 type Entry struct {
 	Signature  string    `json:"signature"`
+	Reasoning  string    `json:"reasoning,omitempty"`
 	RequestID  string    `json:"requestID"`
 	ToolCallID string    `json:"toolCallID"`
 	Model      string    `json:"model"`

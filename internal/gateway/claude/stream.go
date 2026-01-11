@@ -29,6 +29,7 @@ type SSEEmitter struct {
 	thinkingBlockIndex       *int
 	collectedEvents          []map[string]any
 	pendingThinkingSignature string
+	pendingThinkingText      strings.Builder
 	enableThinkingSignature  bool
 	mu                       sync.Mutex
 }
@@ -217,6 +218,7 @@ func (e *SSEEmitter) ensureThinkingBlock() error {
 	if e.thinkingBlockIndex != nil {
 		return nil
 	}
+	e.pendingThinkingText.Reset()
 	idx := e.nextIndex
 	e.nextIndex++
 	e.thinkingBlockIndex = &idx
@@ -252,6 +254,7 @@ func (e *SSEEmitter) sendThinkingLocked(text string) error {
 	if err := e.ensureThinkingBlock(); err != nil {
 		return err
 	}
+	e.pendingThinkingText.WriteString(text)
 	return e.writeSSE("content_block_delta", map[string]any{
 		"type":  "content_block_delta",
 		"index": *e.thinkingBlockIndex,
@@ -278,7 +281,7 @@ func (e *SSEEmitter) sendToolCallLocked(fc *vertex.FunctionCall, thoughtSignatur
 		sig = e.pendingThinkingSignature
 	}
 	if sig != "" {
-		signature.GetManager().Save(e.requestID, fc.ID, sig, e.model)
+		signature.GetManager().Save(e.requestID, fc.ID, sig, e.pendingThinkingText.String(), e.model)
 		// Bind the signature to this functionCall; do not attach it to thinking blocks.
 		// Keep pendingThinkingSignature so multiple tool calls in the same turn can reuse it
 		// unless a new signature arrives.

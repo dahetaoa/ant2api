@@ -81,23 +81,33 @@ func toVertexContents(req *ChatRequest, requestID string) []vertex.Content {
 			}
 
 			firstToolSig := ""
+			firstToolReasoning := ""
 			if len(m.ToolCalls) > 0 {
-				if s, ok := signature.GetManager().LookupByToolCallID(m.ToolCalls[0].ID); ok {
-					firstToolSig = s
+				if e, ok := signature.GetManager().LookupByToolCallID(m.ToolCalls[0].ID); ok {
+					firstToolSig = strings.TrimSpace(e.Signature)
+					firstToolReasoning = e.Reasoning
 				}
 			}
 
-			// Claude thinking models: only include thought parts when we can also attach a thoughtSignature.
-			// Some backend responses may omit thinking/signature; in that case, do NOT insert synthetic
-			// thought blocks (otherwise Vertex will reject the request).
+			// Claude thinking models: Vertex requires a thoughtSignature-carrying thought part before tool calls.
+			// Many clients don't persist thinking text, so we reconstruct it server-side (client > cache > dummy).
 			if isClaudeThinking {
-				if firstToolSig != "" {
-					// IMPORTANT: If the client did not send a thinking chain for this turn, do not
-					// synthesize a thought block (even if we have a cached signature). Vertex history
-					// must reflect the client-provided content.
-					if thinkingText != "" {
-						parts = append(parts, vertex.Part{Text: thinkingText, Thought: true, ThoughtSignature: firstToolSig})
+				injectedText := thinkingText
+				if injectedText == "" {
+					injectedText = strings.TrimSpace(firstToolReasoning)
+				}
+				injectedSig := firstToolSig
+				if injectedSig != "" && injectedText == "" && len(m.ToolCalls) > 0 {
+					injectedText = "[missing thought text]"
+				}
+				if injectedSig == "" && len(m.ToolCalls) > 0 {
+					injectedSig = "context_engineering_is_the_way_to_go"
+					if injectedText == "" {
+						injectedText = "[missing thought text]"
 					}
+				}
+				if injectedSig != "" && injectedText != "" {
+					parts = append(parts, vertex.Part{Text: injectedText, Thought: true, ThoughtSignature: injectedSig})
 				}
 			} else if thinkingText != "" {
 				parts = append(parts, vertex.Part{Text: thinkingText, Thought: true})
@@ -112,8 +122,8 @@ func toVertexContents(req *ChatRequest, requestID string) []vertex.Content {
 				if isGemini {
 					// Gemini: signature is attached to the first functionCall part.
 					// Claude: signature must not be placed on functionCall parts.
-					if s, ok := signature.GetManager().LookupByToolCallID(tc.ID); ok {
-						sig = s
+					if e, ok := signature.GetManager().LookupByToolCallID(tc.ID); ok {
+						sig = strings.TrimSpace(e.Signature)
 					}
 					if i != 0 {
 						sig = ""

@@ -21,18 +21,19 @@ type StreamDataPart struct {
 }
 
 type StreamWriter struct {
-	w               http.ResponseWriter
-	id              string
-	created         int64
-	model           string
-	requestID       string
-	sentRole        bool
-	contentBuf      []byte
-	reasoningBuf    []byte
-	toolCalls       []ToolCall
-	collectedEvents []map[string]any
-	pendingSig      string
-	mu              sync.Mutex
+	w                http.ResponseWriter
+	id               string
+	created          int64
+	model            string
+	requestID        string
+	sentRole         bool
+	contentBuf       []byte
+	reasoningBuf     []byte
+	pendingReasoning strings.Builder
+	toolCalls        []ToolCall
+	collectedEvents  []map[string]any
+	pendingSig       string
+	mu               sync.Mutex
 }
 
 func NewStreamWriter(w http.ResponseWriter, id string, created int64, model string, requestID string, sessionID string) *StreamWriter {
@@ -64,6 +65,7 @@ func (sw *StreamWriter) ProcessPart(part StreamDataPart) error {
 	}
 
 	if part.Thought {
+		sw.pendingReasoning.WriteString(part.Text)
 		return sw.writeReasoningLocked(part.Text)
 	}
 	if part.Text != "" {
@@ -75,15 +77,23 @@ func (sw *StreamWriter) ProcessPart(part StreamDataPart) error {
 			toolCallID = id.ToolCallID()
 		}
 
+		reasoning := sw.pendingReasoning.String()
+		saved := false
 		if isClaudeThinking {
 			if sw.pendingSig != "" {
-				signature.GetManager().Save(sw.requestID, toolCallID, sw.pendingSig, sw.model)
+				signature.GetManager().Save(sw.requestID, toolCallID, sw.pendingSig, reasoning, sw.model)
 				sw.pendingSig = ""
+				saved = true
 			} else if part.ThoughtSignature != "" {
-				signature.GetManager().Save(sw.requestID, toolCallID, part.ThoughtSignature, sw.model)
+				signature.GetManager().Save(sw.requestID, toolCallID, part.ThoughtSignature, reasoning, sw.model)
+				saved = true
 			}
 		} else if part.ThoughtSignature != "" {
-			signature.GetManager().Save(sw.requestID, toolCallID, part.ThoughtSignature, sw.model)
+			signature.GetManager().Save(sw.requestID, toolCallID, part.ThoughtSignature, reasoning, sw.model)
+			saved = true
+		}
+		if saved {
+			sw.pendingReasoning.Reset()
 		}
 		args := "{}"
 		if part.FunctionCall.Args != nil {

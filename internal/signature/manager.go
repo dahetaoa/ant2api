@@ -29,7 +29,7 @@ func GetManager() *Manager {
 	return managerInst
 }
 
-func (m *Manager) Save(requestID, toolCallID, signature, model string) {
+func (m *Manager) Save(requestID, toolCallID, signature, reasoning, model string) {
 	if requestID == "" || toolCallID == "" || signature == "" {
 		return
 	}
@@ -37,6 +37,7 @@ func (m *Manager) Save(requestID, toolCallID, signature, model string) {
 	now := time.Now()
 	e := Entry{
 		Signature:  signature,
+		Reasoning:  reasoning,
 		RequestID:  requestID,
 		ToolCallID: toolCallID,
 		Model:      model,
@@ -48,18 +49,18 @@ func (m *Manager) Save(requestID, toolCallID, signature, model string) {
 	m.store.Enqueue(e)
 }
 
-func (m *Manager) Lookup(requestID, toolCallID string) (string, bool) {
+func (m *Manager) Lookup(requestID, toolCallID string) (Entry, bool) {
 	e, ok := m.cache.Get(requestID, toolCallID)
 	if !ok || e.Signature == "" {
-		return "", false
+		return Entry{}, false
 	}
-	return e.Signature, true
+	return e, true
 }
 
-func (m *Manager) LookupByToolCallID(toolCallID string) (string, bool) {
+func (m *Manager) LookupByToolCallID(toolCallID string) (Entry, bool) {
 	e, ok := m.cache.GetByToolCallID(toolCallID)
 	if !ok || e.Signature == "" {
-		return "", false
+		return Entry{}, false
 	}
-	return e.Signature, true
+	return e, true
 }
