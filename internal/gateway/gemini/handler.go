@@ -363,7 +363,9 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 		vreq.RequestID = rid
 	}
 	isImageModel := strings.Contains(strings.ToLower(strings.TrimSpace(model)), "image")
-	if !isImageModel {
+	isGemini3Flash := strings.HasPrefix(strings.TrimSpace(model), "gemini-3-flash")
+	shouldSkipSystemPrompt := isImageModel || isGemini3Flash
+	if !shouldSkipSystemPrompt {
 		vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
 	}
 	if vreq.Request.SystemInstruction != nil && vreq.Request.SystemInstruction.Role == "" {
@@ -447,7 +449,9 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 		vreq.RequestID = rid
 	}
 	isImageModel := strings.Contains(strings.ToLower(strings.TrimSpace(model)), "image")
-	if !isImageModel {
+	isGemini3Flash := strings.HasPrefix(strings.TrimSpace(model), "gemini-3-flash")
+	shouldSkipSystemPrompt := isImageModel || isGemini3Flash
+	if !shouldSkipSystemPrompt {
 		vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
 	}
 	if vreq.Request.SystemInstruction != nil && vreq.Request.SystemInstruction.Role == "" {

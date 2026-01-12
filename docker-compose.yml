@@ -1,0 +1,18 @@
+services:
+  ant2api:
+    image: dahetao/ant2api:latest
+    container_name: ant2api
+    ports:
+      - "8045:8045"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8045
+      - API_USER_AGENT=antigravity/1.11.17 windows/amd64
+      - API_KEY=sk-123456
+      - DATA_DIR=./data
+      - TIMEOUT=180000
+      - ENDPOINT_MODE=production
+      - DEBUG=high
+    restart: unless-stopped

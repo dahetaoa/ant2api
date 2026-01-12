@@ -1,0 +1,16 @@
+# 敏感数据
+data/accounts.json
+data/signatures/
+.env
+
+# 构建产物
+bin/
+*.exe
+server
+main
+
+# 日志和临时文件
+*.log
+*.prof
+benchmark_results/
+*.txt

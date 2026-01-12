@@ -26,6 +26,7 @@ func ToVertexRequest(req *MessagesRequest, account *AccountContext) (*vertex.Req
 	model := strings.TrimSpace(req.Model)
 	isClaudeModel := strings.HasPrefix(model, "claude-")
 	isImageModel := strings.Contains(strings.ToLower(model), "image")
+	isGemini3Flash := strings.HasPrefix(model, "gemini-3-flash")
 
 	requestID := id.RequestID()
 	vreq := &vertex.Request{
@@ -55,7 +56,8 @@ func ToVertexRequest(req *MessagesRequest, account *AccountContext) (*vertex.Req
 		return nil, "", err
 	}
 	vreq.Request.Contents = contents
-	if !isImageModel {
+	shouldSkipSystemPrompt := isImageModel || isGemini3Flash
+	if !shouldSkipSystemPrompt {
 		vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
 	}
 

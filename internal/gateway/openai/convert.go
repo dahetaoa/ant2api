@@ -15,6 +15,7 @@ func ToVertexRequest(req *ChatRequest, account *AccountContext) (*vertex.Request
 	modelName := req.Model
 	model := strings.TrimSpace(req.Model)
 	isImageModel := strings.Contains(strings.ToLower(model), "image")
+	isGemini3Flash := strings.HasPrefix(model, "gemini-3-flash")
 	requestID := id.RequestID()
 
 	vreq := &vertex.Request{
@@ -40,7 +41,8 @@ func ToVertexRequest(req *ChatRequest, account *AccountContext) (*vertex.Request
 
 	vreq.Request.GenerationConfig = buildGenerationConfig(req)
 	vreq.Request.Contents = vertex.SanitizeContents(toVertexContents(req, requestID))
-	if !isImageModel {
+	shouldSkipSystemPrompt := isImageModel || isGemini3Flash
+	if !shouldSkipSystemPrompt {
 		vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
 	}
 

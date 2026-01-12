@@ -45,22 +45,40 @@ func (m *Manager) Save(requestID, toolCallID, signature, reasoning, model string
 		LastAccess: now,
 	}
 
-	m.cache.Put(e)
+	m.store.PutHot(e)
+	m.cache.Put(EntryIndex{
+		RequestID:  requestID,
+		ToolCallID: toolCallID,
+		Model:      model,
+		CreatedAt:  now,
+		LastAccess: now,
+		Offset:     -1,
+	})
 	m.store.Enqueue(e)
 }
 
 func (m *Manager) Lookup(requestID, toolCallID string) (Entry, bool) {
-	e, ok := m.cache.Get(requestID, toolCallID)
+	idx, ok := m.cache.Get(requestID, toolCallID)
+	if !ok {
+		return Entry{}, false
+	}
+	e, ok := m.store.LoadByIndex(idx)
 	if !ok || e.Signature == "" {
 		return Entry{}, false
 	}
+	e.LastAccess = idx.LastAccess
 	return e, true
 }
 
 func (m *Manager) LookupByToolCallID(toolCallID string) (Entry, bool) {
-	e, ok := m.cache.GetByToolCallID(toolCallID)
+	idx, ok := m.cache.GetByToolCallID(toolCallID)
+	if !ok {
+		return Entry{}, false
+	}
+	e, ok := m.store.LoadByIndex(idx)
 	if !ok || e.Signature == "" {
 		return Entry{}, false
 	}
+	e.LastAccess = idx.LastAccess
 	return e, true
 }

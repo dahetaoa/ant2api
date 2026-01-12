@@ -9,7 +9,7 @@ import (
 type lruItem struct {
 	key      string
 	toolCall string
-	entry    Entry
+	index    EntryIndex
 }
 
 type LRU struct {
@@ -32,9 +32,9 @@ func NewLRU(capacity int) *LRU {
 	}
 }
 
-func (c *LRU) Put(e Entry) {
-	key := e.Key()
-	if key == "" || e.ToolCallID == "" {
+func (c *LRU) Put(idx EntryIndex) {
+	key := idx.Key()
+	if key == "" || idx.ToolCallID == "" {
 		return
 	}
 
@@ -43,16 +43,16 @@ func (c *LRU) Put(e Entry) {
 
 	if el, ok := c.byKey[key]; ok {
 		it := el.Value.(*lruItem)
-		it.entry = e
+		it.index = idx
 		c.ll.MoveToFront(el)
-		c.byToolID[e.ToolCallID] = el
+		c.byToolID[idx.ToolCallID] = el
 		return
 	}
 
-	item := &lruItem{key: key, toolCall: e.ToolCallID, entry: e}
+	item := &lruItem{key: key, toolCall: idx.ToolCallID, index: idx}
 	el := c.ll.PushFront(item)
 	c.byKey[key] = el
-	c.byToolID[e.ToolCallID] = el
+	c.byToolID[idx.ToolCallID] = el
 
 	for c.ll.Len() > c.capacity {
 		back := c.ll.Back()
@@ -68,9 +68,9 @@ func (c *LRU) Put(e Entry) {
 	}
 }
 
-func (c *LRU) Get(requestID, toolCallID string) (Entry, bool) {
+func (c *LRU) Get(requestID, toolCallID string) (EntryIndex, bool) {
 	if requestID == "" || toolCallID == "" {
-		return Entry{}, false
+		return EntryIndex{}, false
 	}
 	key := requestID + ":" + toolCallID
 
@@ -79,17 +79,17 @@ func (c *LRU) Get(requestID, toolCallID string) (Entry, bool) {
 
 	el, ok := c.byKey[key]
 	if !ok {
-		return Entry{}, false
+		return EntryIndex{}, false
 	}
 	it := el.Value.(*lruItem)
-	it.entry.LastAccess = time.Now()
+	it.index.LastAccess = time.Now()
 	c.ll.MoveToFront(el)
-	return it.entry, true
+	return it.index, true
 }
 
-func (c *LRU) GetByToolCallID(toolCallID string) (Entry, bool) {
+func (c *LRU) GetByToolCallID(toolCallID string) (EntryIndex, bool) {
 	if toolCallID == "" {
-		return Entry{}, false
+		return EntryIndex{}, false
 	}
 
 	c.mu.Lock()
@@ -97,12 +97,12 @@ func (c *LRU) GetByToolCallID(toolCallID string) (Entry, bool) {
 
 	el, ok := c.byToolID[toolCallID]
 	if !ok {
-		return Entry{}, false
+		return EntryIndex{}, false
 	}
 	it := el.Value.(*lruItem)
-	it.entry.LastAccess = time.Now()
+	it.index.LastAccess = time.Now()
 	c.ll.MoveToFront(el)
-	return it.entry, true
+	return it.index, true
 }
 
 // Session-based lookup removed; signatures are indexed by tool_call_id only.
