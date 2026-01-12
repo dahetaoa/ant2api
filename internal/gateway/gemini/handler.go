@@ -12,6 +12,7 @@ import (
 	"anti2api-golang/refactor/internal/logger"
 	"anti2api-golang/refactor/internal/pkg/id"
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
+	"anti2api-golang/refactor/internal/pkg/modelutil"
 	"anti2api-golang/refactor/internal/vertex"
 )
 
@@ -53,31 +54,59 @@ func toVertexGenerationConfig(model string, cfg *GeminiGenerationConfig) *vertex
 	isClaude := strings.HasPrefix(model, "claude-")
 	isGemini3 := strings.HasPrefix(model, "gemini-3-") || strings.HasPrefix(model, "gemini-3")
 	isGemini := strings.HasPrefix(model, "gemini-")
+	flashLevel, _, isGemini3Flash := modelutil.Gemini3FlashThinkingConfig(model)
+	sonnet45Budget, isClaudeSonnet45 := modelutil.ClaudeSonnet45ThinkingBudget(model)
+	opus45Budget, _, isClaudeOpus45 := modelutil.ClaudeOpus45ThinkingConfig(model)
+	forcedClaudeBudget := isClaudeSonnet45 || isClaudeOpus45
 
 	if cfg == nil {
 		if isClaude {
-			return &vertex.GenerationConfig{CandidateCount: 1, MaxOutputTokens: 64000}
+			out := &vertex.GenerationConfig{CandidateCount: 1, MaxOutputTokens: 64000}
+			if isClaudeSonnet45 {
+				out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: sonnet45Budget}
+			}
+			if isClaudeOpus45 {
+				out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: opus45Budget}
+			}
+			return out
 		}
 		if isGemini {
-			return &vertex.GenerationConfig{CandidateCount: 1, MaxOutputTokens: 65535}
+			out := &vertex.GenerationConfig{CandidateCount: 1, MaxOutputTokens: 65535}
+			if isGemini3Flash {
+				// Gemini 3 Flash: ignore client thinking params; force by model name.
+				if flashLevel == "high" {
+					out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingLevel: "high", ThinkingBudget: 0}
+				} else {
+					out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: 0}
+				}
+			}
+			return out
 		}
 		return nil
 	}
 	out := &vertex.GenerationConfig{CandidateCount: cfg.CandidateCount, StopSequences: cfg.StopSequences, MaxOutputTokens: cfg.MaxOutputTokens, TopK: cfg.TopK}
 	out.Temperature = cfg.Temperature
 	out.TopP = cfg.TopP
-	if cfg.ThinkingConfig != nil {
+	if forcedClaudeBudget {
+		// Claude Sonnet 4.5: ignore client thinking params; force by model name.
+		// Claude Opus 4.5: ignore client thinking params; force by model name.
+		budget := sonnet45Budget
+		if isClaudeOpus45 {
+			budget = opus45Budget
+		}
+		out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: budget}
+	} else if !isGemini3Flash && cfg.ThinkingConfig != nil {
 		out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: cfg.ThinkingConfig.IncludeThoughts, ThinkingBudget: cfg.ThinkingConfig.ThinkingBudget, ThinkingLevel: cfg.ThinkingConfig.ThinkingLevel}
 	}
 
 	// Gemini 3 models: always use thinking_level=high when thinking is requested.
-	if isGemini3 && out.ThinkingConfig != nil && out.ThinkingConfig.IncludeThoughts {
+	if isGemini3 && !isGemini3Flash && out.ThinkingConfig != nil && out.ThinkingConfig.IncludeThoughts {
 		out.ThinkingConfig.ThinkingLevel = "high"
 		out.ThinkingConfig.ThinkingBudget = 0
 	}
 
 	// Claude thinking models require a non-zero thinkingBudget to output thoughts.
-	if isClaude && out.ThinkingConfig != nil && out.ThinkingConfig.IncludeThoughts {
+	if isClaude && !forcedClaudeBudget && out.ThinkingConfig != nil && out.ThinkingConfig.IncludeThoughts {
 		out.ThinkingConfig.ThinkingLevel = ""
 		if out.ThinkingConfig.ThinkingBudget <= 0 {
 			out.ThinkingConfig.ThinkingBudget = 32000
@@ -124,6 +153,15 @@ func toVertexGenerationConfig(model string, cfg *GeminiGenerationConfig) *vertex
 			} else if out.MaxOutputTokens <= out.ThinkingConfig.ThinkingBudget {
 				out.MaxOutputTokens = out.ThinkingConfig.ThinkingBudget + 4096
 			}
+		}
+	}
+
+	// Gemini 3 Flash: ignore any client-provided thinkingConfig; force by model name.
+	if isGemini3Flash {
+		if flashLevel == "high" {
+			out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingLevel: "high", ThinkingBudget: 0}
+		} else {
+			out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: 0}
 		}
 	}
 
@@ -262,15 +300,55 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	models := make([]GeminiModel, 0, len(vm.Models))
+	hasGemini3Flash := false
+	hasGemini3FlashThinking := false
+	hasClaudeOpus45 := false
+	hasClaudeOpus45Thinking := false
 	for modelID := range vm.Models {
 		modelID = strings.TrimSpace(modelID)
 		if modelID == "" {
 			continue
 		}
+		lower := strings.ToLower(modelID)
+		if strings.Contains(lower, "gemini-3-flash") {
+			hasGemini3Flash = true
+		}
+		if strings.HasPrefix(lower, "gemini-3-flash-thinking") {
+			hasGemini3FlashThinking = true
+		}
+		if strings.HasPrefix(lower, "claude-opus-4-5-thinking") {
+			hasClaudeOpus45Thinking = true
+		} else if strings.HasPrefix(lower, "claude-opus-4-5") {
+			hasClaudeOpus45 = true
+		}
 		models = append(models, GeminiModel{
 			Name:        "models/" + modelID,
 			DisplayName: modelID,
 			Description: "Model provided by google",
+			SupportedGenerationMethods: []string{
+				"generateContent",
+				"streamGenerateContent",
+			},
+		})
+	}
+	// Virtual model injection: add "models/gemini-3-flash-thinking" when any Gemini 3 Flash model exists.
+	if hasGemini3Flash && !hasGemini3FlashThinking {
+		models = append(models, GeminiModel{
+			Name:        "models/gemini-3-flash-thinking",
+			DisplayName: "gemini-3-flash-thinking",
+			Description: "Virtual model provided by google (gemini-3-flash with thinkingLevel=high)",
+			SupportedGenerationMethods: []string{
+				"generateContent",
+				"streamGenerateContent",
+			},
+		})
+	}
+	// Virtual model injection: add "models/claude-opus-4-5" when only claude-opus-4-5-thinking* exists.
+	if hasClaudeOpus45Thinking && !hasClaudeOpus45 {
+		models = append(models, GeminiModel{
+			Name:        "models/claude-opus-4-5",
+			DisplayName: "claude-opus-4-5",
+			Description: "Virtual model provided by anthropic (claude-opus-4-5-thinking with thinkingBudget=0)",
 			SupportedGenerationMethods: []string{
 				"generateContent",
 				"streamGenerateContent",
@@ -341,9 +419,16 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 		acc.ProjectID = id.ProjectID()
 	}
 
+	backendModel := model
+	if _, bm, ok := modelutil.Gemini3FlashThinkingConfig(model); ok {
+		backendModel = bm
+	}
+	if _, bm, ok := modelutil.ClaudeOpus45ThinkingConfig(model); ok {
+		backendModel = bm
+	}
 	vreq := &vertex.Request{
 		Project:   acc.ProjectID,
-		Model:     model,
+		Model:     backendModel,
 		RequestID: id.RequestID(),
 		Request: vertex.InnerReq{
 			Contents:          sanitizeContents(req.Contents),
@@ -363,7 +448,7 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 		vreq.RequestID = rid
 	}
 	isImageModel := strings.Contains(strings.ToLower(strings.TrimSpace(model)), "image")
-	isGemini3Flash := strings.HasPrefix(strings.TrimSpace(model), "gemini-3-flash")
+	isGemini3Flash := modelutil.IsGemini3Flash(model)
 	shouldSkipSystemPrompt := isImageModel || isGemini3Flash
 	if !shouldSkipSystemPrompt {
 		vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
@@ -427,9 +512,16 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 		acc.ProjectID = id.ProjectID()
 	}
 
+	backendModel := model
+	if _, bm, ok := modelutil.Gemini3FlashThinkingConfig(model); ok {
+		backendModel = bm
+	}
+	if _, bm, ok := modelutil.ClaudeOpus45ThinkingConfig(model); ok {
+		backendModel = bm
+	}
 	vreq := &vertex.Request{
 		Project:   acc.ProjectID,
-		Model:     model,
+		Model:     backendModel,
 		RequestID: id.RequestID(),
 		Request: vertex.InnerReq{
 			Contents:          sanitizeContents(req.Contents),
@@ -449,7 +541,7 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 		vreq.RequestID = rid
 	}
 	isImageModel := strings.Contains(strings.ToLower(strings.TrimSpace(model)), "image")
-	isGemini3Flash := strings.HasPrefix(strings.TrimSpace(model), "gemini-3-flash")
+	isGemini3Flash := modelutil.IsGemini3Flash(model)
 	shouldSkipSystemPrompt := isImageModel || isGemini3Flash
 	if !shouldSkipSystemPrompt {
 		vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"anti2api-golang/refactor/internal/pkg/id"
+	"anti2api-golang/refactor/internal/pkg/modelutil"
 	"anti2api-golang/refactor/internal/signature"
 	"anti2api-golang/refactor/internal/vertex"
 )
@@ -26,9 +27,18 @@ func ToVertexRequest(req *MessagesRequest, account *AccountContext) (*vertex.Req
 	model := strings.TrimSpace(req.Model)
 	isClaudeModel := strings.HasPrefix(model, "claude-")
 	isImageModel := strings.Contains(strings.ToLower(model), "image")
-	isGemini3Flash := strings.HasPrefix(model, "gemini-3-flash")
+	isGemini3Flash := modelutil.IsGemini3Flash(model)
 
 	requestID := id.RequestID()
+	vertexModel := req.Model
+	if _, backendModel, ok := modelutil.Gemini3FlashThinkingConfig(req.Model); ok {
+		// Virtual Gemini 3 Flash models map to the same backend model id.
+		vertexModel = backendModel
+	}
+	if _, backendModel, ok := modelutil.ClaudeOpus45ThinkingConfig(req.Model); ok {
+		// Virtual Claude Opus 4.5 (non "-thinking") maps to the "-thinking" backend model id.
+		vertexModel = backendModel
+	}
 	vreq := &vertex.Request{
 		Project:   account.ProjectID,
 		Model:     req.Model,
@@ -38,6 +48,7 @@ func ToVertexRequest(req *MessagesRequest, account *AccountContext) (*vertex.Req
 			SessionID: account.SessionID,
 		},
 	}
+	vreq.Model = vertexModel
 	vreq.RequestType = "agent"
 	vreq.UserAgent = "antigravity"
 
@@ -92,7 +103,23 @@ func buildGenerationConfig(req *MessagesRequest) *vertex.GenerationConfig {
 		cfg.StopSequences = append(cfg.StopSequences, req.StopSequences...)
 	}
 
-	if req.Thinking != nil && strings.ToLower(req.Thinking.Type) == "enabled" {
+	// Claude Sonnet 4.5: thinkingBudget is determined solely by the model name.
+	// Always ignore client-provided thinking params for these models.
+	if budget, ok := modelutil.ClaudeSonnet45ThinkingBudget(model); ok {
+		cfg.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: budget}
+	} else if budget, _, ok := modelutil.ClaudeOpus45ThinkingConfig(model); ok {
+		// Claude Opus 4.5: thinkingBudget is determined solely by the model name.
+		// Always ignore client-provided thinking params for these models.
+		cfg.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: budget}
+	} else if level, _, ok := modelutil.Gemini3FlashThinkingConfig(model); ok {
+		// Gemini 3 Flash: thinkingLevel is determined solely by the model name.
+		// Always ignore client-provided thinking params for these models.
+		if level == "high" {
+			cfg.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingLevel: "high", ThinkingBudget: 0}
+		} else {
+			cfg.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: 0}
+		}
+	} else if req.Thinking != nil && strings.ToLower(req.Thinking.Type) == "enabled" {
 		cfg.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true}
 		if isClaude {
 			// Claude thinking models require a non-zero thinkingBudget to output thoughts.

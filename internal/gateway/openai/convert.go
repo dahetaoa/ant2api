@@ -7,6 +7,7 @@ import (
 
 	"anti2api-golang/refactor/internal/pkg/id"
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
+	"anti2api-golang/refactor/internal/pkg/modelutil"
 	"anti2api-golang/refactor/internal/signature"
 	"anti2api-golang/refactor/internal/vertex"
 )
@@ -15,12 +16,22 @@ func ToVertexRequest(req *ChatRequest, account *AccountContext) (*vertex.Request
 	modelName := req.Model
 	model := strings.TrimSpace(req.Model)
 	isImageModel := strings.Contains(strings.ToLower(model), "image")
-	isGemini3Flash := strings.HasPrefix(model, "gemini-3-flash")
+	isGemini3Flash := modelutil.IsGemini3Flash(model)
 	requestID := id.RequestID()
+
+	vertexModel := modelName
+	if _, backendModel, ok := modelutil.Gemini3FlashThinkingConfig(modelName); ok {
+		// Virtual Gemini 3 Flash models map to the same backend model id.
+		vertexModel = backendModel
+	}
+	if _, backendModel, ok := modelutil.ClaudeOpus45ThinkingConfig(modelName); ok {
+		// Virtual Claude Opus 4.5 (non "-thinking") maps to the "-thinking" backend model id.
+		vertexModel = backendModel
+	}
 
 	vreq := &vertex.Request{
 		Project:   account.ProjectID,
-		Model:     modelName,
+		Model:     vertexModel,
 		RequestID: requestID,
 		Request: vertex.InnerReq{
 			Contents:  nil,
@@ -233,6 +244,28 @@ func buildGenerationConfig(req *ChatRequest) *vertex.GenerationConfig {
 
 func buildThinkingConfig(model, reasoningEffort string) *vertex.ThinkingConfig {
 	model = strings.TrimSpace(model)
+	// Gemini 3 Flash: thinkingLevel is determined solely by the model name.
+	// Always ignore client-provided thinking params for these models.
+	if level, _, ok := modelutil.Gemini3FlashThinkingConfig(model); ok {
+		if level == "high" {
+			return &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingLevel: "high", ThinkingBudget: 0}
+		}
+		// gemini-3-flash (non "-thinking"): force thinkingBudget=0.
+		return &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: 0}
+	}
+
+	// Claude Sonnet 4.5: thinkingBudget is determined solely by the model name.
+	// Always ignore client-provided thinking params for these models.
+	if budget, ok := modelutil.ClaudeSonnet45ThinkingBudget(model); ok {
+		return &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: budget}
+	}
+
+	// Claude Opus 4.5: thinkingBudget is determined solely by the model name.
+	// Always ignore client-provided thinking params for these models.
+	if budget, _, ok := modelutil.ClaudeOpus45ThinkingConfig(model); ok {
+		return &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: budget}
+	}
+
 	effort := strings.ToLower(strings.TrimSpace(reasoningEffort))
 
 	isClaude := strings.HasPrefix(model, "claude-")

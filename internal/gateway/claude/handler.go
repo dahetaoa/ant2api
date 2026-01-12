@@ -3,6 +3,7 @@ package claude
 import (
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -12,6 +13,16 @@ import (
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
 	"anti2api-golang/refactor/internal/vertex"
 )
+
+type ModelListResponse struct {
+	Data []ModelItem `json:"data"`
+}
+
+type ModelItem struct {
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	DisplayName string `json:"display_name,omitempty"`
+}
 
 func HandleMessages(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
@@ -64,6 +75,85 @@ func HandleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out := ToMessagesResponse(vresp, requestID, req.Model, inputTokens)
+	if logger.IsClientLogEnabled() {
+		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func HandleListModels(w http.ResponseWriter, r *http.Request) {
+	if logger.IsClientLogEnabled() {
+		logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, nil)
+	}
+	startTime := time.Now()
+	acc, err := credential.GetStore().GetToken()
+	if err != nil {
+		if logger.IsClientLogEnabled() {
+			logger.ClientResponse(http.StatusServiceUnavailable, time.Since(startTime), err.Error())
+		}
+		writeClaudeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	if acc.ProjectID == "" {
+		acc.ProjectID = id.ProjectID()
+	}
+
+	vm, err := vertex.FetchAvailableModels(r.Context(), acc.ProjectID, acc.AccessToken)
+	if err != nil {
+		if logger.IsClientLogEnabled() {
+			logger.ClientResponse(statusFromVertexErr(err), time.Since(startTime), err.Error())
+		}
+		writeClaudeError(w, statusFromVertexErr(err), err.Error())
+		return
+	}
+
+	ids := make([]string, 0, len(vm.Models)+2)
+	seen := make(map[string]struct{}, len(vm.Models)+2)
+	hasGemini3Flash := false
+	hasClaudeOpus45 := false
+	hasClaudeOpus45Thinking := false
+	for k := range vm.Models {
+		idv := strings.TrimSpace(k)
+		if idv == "" {
+			continue
+		}
+		if strings.EqualFold(idv, "gemini-3-flash") {
+			hasGemini3Flash = true
+		}
+		lower := strings.ToLower(idv)
+		if strings.HasPrefix(lower, "claude-opus-4-5-thinking") {
+			hasClaudeOpus45Thinking = true
+		} else if strings.HasPrefix(lower, "claude-opus-4-5") {
+			hasClaudeOpus45 = true
+		}
+		if _, ok := seen[idv]; ok {
+			continue
+		}
+		seen[idv] = struct{}{}
+		ids = append(ids, idv)
+	}
+	// Virtual model injection: only add gemini-3-flash-thinking when gemini-3-flash exists.
+	if hasGemini3Flash {
+		const virtual = "gemini-3-flash-thinking"
+		if _, ok := seen[virtual]; !ok {
+			ids = append(ids, virtual)
+		}
+	}
+	// Virtual model injection: add claude-opus-4-5 when only claude-opus-4-5-thinking* exists.
+	if hasClaudeOpus45Thinking && !hasClaudeOpus45 {
+		const virtual = "claude-opus-4-5"
+		if _, ok := seen[virtual]; !ok {
+			ids = append(ids, virtual)
+		}
+	}
+	sort.Strings(ids)
+
+	items := make([]ModelItem, 0, len(ids))
+	for _, mid := range ids {
+		items = append(items, ModelItem{ID: mid, Type: "model", DisplayName: mid})
+	}
+
+	out := ModelListResponse{Data: items}
 	if logger.IsClientLogEnabled() {
 		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
 	}

@@ -1,5 +1,7 @@
 package vertex
 
+import "encoding/json"
+
 // Request is the Vertex AI Cloud Code API wrapper request.
 // It matches the format used by antigravity Cloud Code endpoints.
 type Request struct {
@@ -89,6 +91,25 @@ type ThinkingConfig struct {
 	IncludeThoughts bool   `json:"includeThoughts"`
 	ThinkingBudget  int    `json:"thinkingBudget,omitempty"`
 	ThinkingLevel   string `json:"thinkingLevel,omitempty"`
+}
+
+func (t ThinkingConfig) MarshalJSON() ([]byte, error) {
+	// Preserve existing "omitempty" behavior for thinkingBudget when thinkingLevel is set,
+	// but allow callers to emit thinkingBudget=0 when thinkingLevel is empty (e.g. gemini-3-flash).
+	type wire struct {
+		IncludeThoughts bool   `json:"includeThoughts"`
+		ThinkingBudget  *int   `json:"thinkingBudget,omitempty"`
+		ThinkingLevel   string `json:"thinkingLevel,omitempty"`
+	}
+	w := wire{
+		IncludeThoughts: t.IncludeThoughts,
+		ThinkingLevel:   t.ThinkingLevel,
+	}
+	if t.ThinkingBudget != 0 || t.ThinkingLevel == "" {
+		b := t.ThinkingBudget
+		w.ThinkingBudget = &b
+	}
+	return json.Marshal(w)
 }
 
 type Response struct {

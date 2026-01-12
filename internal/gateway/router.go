@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"anti2api-golang/refactor/internal/gateway/claude"
 	"anti2api-golang/refactor/internal/gateway/gemini"
@@ -17,7 +18,8 @@ func NewRouter() http.Handler {
 	// NOTE: Keep routing compatible with Go 1.21's ServeMux behavior.
 	mux.HandleFunc("/health", allowMethods(handleHealth, http.MethodGet, http.MethodHead))
 
-	mux.HandleFunc("/v1/models", allowMethods(openai.HandleListModels, http.MethodGet, http.MethodHead))
+	// Shared path between OpenAI and Anthropic-compatible clients; select response format by headers.
+	mux.HandleFunc("/v1/models", allowMethods(handleListModels, http.MethodGet, http.MethodHead))
 	mux.HandleFunc("/v1/chat/completions", allowMethods(openai.HandleChatCompletions, http.MethodPost))
 	mux.HandleFunc("/v1/chat/completions/", allowMethods(openai.HandleChatCompletions, http.MethodPost))
 
@@ -34,6 +36,15 @@ func NewRouter() http.Handler {
 	h = middleware.Auth(h)
 
 	return h
+}
+
+func handleListModels(w http.ResponseWriter, r *http.Request) {
+	// Anthropic SDKs typically include this header; prefer Anthropic format when present.
+	if strings.TrimSpace(r.Header.Get("anthropic-version")) != "" || strings.TrimSpace(r.Header.Get("anthropic-beta")) != "" {
+		claude.HandleListModels(w, r)
+		return
+	}
+	openai.HandleListModels(w, r)
 }
 
 func allowMethods(h http.HandlerFunc, methods ...string) http.HandlerFunc {

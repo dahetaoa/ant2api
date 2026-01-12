@@ -41,11 +41,43 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ids := make([]string, 0, len(vm.Models))
+	ids := make([]string, 0, len(vm.Models)+2)
+	seen := make(map[string]struct{}, len(vm.Models)+2)
+	hasGemini3Flash := false
+	hasClaudeOpus45 := false
+	hasClaudeOpus45Thinking := false
 	for k := range vm.Models {
-		k = strings.TrimSpace(k)
-		if k != "" {
-			ids = append(ids, k)
+		idv := strings.TrimSpace(k)
+		if idv == "" {
+			continue
+		}
+		if strings.EqualFold(idv, "gemini-3-flash") {
+			hasGemini3Flash = true
+		}
+		lower := strings.ToLower(idv)
+		if strings.HasPrefix(lower, "claude-opus-4-5-thinking") {
+			hasClaudeOpus45Thinking = true
+		} else if strings.HasPrefix(lower, "claude-opus-4-5") {
+			hasClaudeOpus45 = true
+		}
+		if _, ok := seen[idv]; ok {
+			continue
+		}
+		seen[idv] = struct{}{}
+		ids = append(ids, idv)
+	}
+	// Virtual model injection: only add gemini-3-flash-thinking when gemini-3-flash exists.
+	if hasGemini3Flash {
+		const virtual = "gemini-3-flash-thinking"
+		if _, ok := seen[virtual]; !ok {
+			ids = append(ids, virtual)
+		}
+	}
+	// Virtual model injection: add claude-opus-4-5 when only claude-opus-4-5-thinking* exists.
+	if hasClaudeOpus45Thinking && !hasClaudeOpus45 {
+		const virtual = "claude-opus-4-5"
+		if _, ok := seen[virtual]; !ok {
+			ids = append(ids, virtual)
 		}
 	}
 	sort.Strings(ids)
