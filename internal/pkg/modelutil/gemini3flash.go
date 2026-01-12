@@ -10,7 +10,7 @@ import "strings"
 //
 // Rules:
 // - gemini-3-flash-thinking* => thinkingLevel="high", backend model strips "-thinking"
-// - gemini-3-flash*          => thinkingLevel="minimal" (callers may choose to use thinkingBudget instead), backend model unchanged
+// - gemini-3-flash*          => non-thinking model, backend model unchanged
 func Gemini3FlashThinkingConfig(model string) (thinkingLevel string, backendModel string, ok bool) {
 	m := strings.TrimSpace(model)
 	m = strings.TrimPrefix(m, "models/")
@@ -28,7 +28,7 @@ func Gemini3FlashThinkingConfig(model string) (thinkingLevel string, backendMode
 		return "high", base + suffix, true
 	}
 	if strings.HasPrefix(m, base) {
-		return "minimal", m, true
+		return "", m, true
 	}
 	return "", "", false
 }

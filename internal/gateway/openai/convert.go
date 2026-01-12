@@ -279,10 +279,10 @@ func buildThinkingConfig(model, reasoningEffort string) *vertex.ThinkingConfig {
 		return &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: 32000}
 	}
 
-	// Gemini 3 models: always use thinkingLevel=high.
-	// Gemini 3 models default to thinking mode, similar to Claude -thinking models.
+	// Gemini 3 non-Flash models: always use thinkingLevel=high.
+	// Gemini 3 non-Flash models default to thinking mode, similar to Claude -thinking models.
 	if isGemini3 {
-		return &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingLevel: "high"}
+		return &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingLevel: "high", ThinkingBudget: 0}
 	}
 
 	if effort == "" {

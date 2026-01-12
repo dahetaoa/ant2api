@@ -131,7 +131,7 @@ func buildGenerationConfig(req *MessagesRequest) *vertex.GenerationConfig {
 			}
 			cfg.ThinkingConfig.ThinkingBudget = budget
 		} else if isGemini3 {
-			// Gemini 3 models: always use thinking_level=high when thinking is requested.
+			// Gemini 3 non-Flash models (e.g. gemini-3-pro): always use thinking_level=high when thinking is requested.
 			cfg.ThinkingConfig.ThinkingLevel = "high"
 			cfg.ThinkingConfig.ThinkingBudget = 0
 		} else {
@@ -333,15 +333,6 @@ func extractToolResultContent(content any) string {
 			}
 		}
 		return b.String()
-	}
-	return ""
-}
-
-func findToolName(parts []vertex.Part, toolUseID string) string {
-	for i := len(parts) - 1; i >= 0; i-- {
-		if parts[i].FunctionCall != nil && parts[i].FunctionCall.ID == toolUseID {
-			return parts[i].FunctionCall.Name
-		}
 	}
 	return ""
 }
