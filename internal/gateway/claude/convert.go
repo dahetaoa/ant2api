@@ -41,14 +41,13 @@ func ToVertexRequest(req *MessagesRequest, account *AccountContext) (*vertex.Req
 	}
 	vreq := &vertex.Request{
 		Project:   account.ProjectID,
-		Model:     req.Model,
+		Model:     vertexModel,
 		RequestID: requestID,
 		Request: vertex.InnerReq{
 			Contents:  nil,
 			SessionID: account.SessionID,
 		},
 	}
-	vreq.Model = vertexModel
 	vreq.RequestType = "agent"
 	vreq.UserAgent = "antigravity"
 

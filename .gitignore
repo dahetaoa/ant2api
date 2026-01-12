@@ -6,6 +6,8 @@ data/
 bin/
 server
 server.exe
+main
+main.exe
 
 # Logs
 *.log

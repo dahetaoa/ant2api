@@ -363,15 +363,7 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 }
 
 func modelFromPath(r *http.Request) (string, bool) {
-	// Go 1.22+ patterns may populate PathValue("model"). Keep it as best-effort.
-	if v := r.PathValue("model"); v != "" {
-		m := strings.TrimPrefix(v, "models/")
-		if m != "" {
-			return m, true
-		}
-	}
-
-	// Fallback for Go 1.21 mux matching: parse from URL path.
+	// Parse from URL path (compatible with Go 1.21 ServeMux).
 	const prefix = "/v1beta/models/"
 	p := r.URL.Path
 	if !strings.HasPrefix(p, prefix) {

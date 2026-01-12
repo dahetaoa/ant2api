@@ -288,5 +288,3 @@ func writeSSEError(w http.ResponseWriter, msg string) error {
 	}
 	return err
 }
-
-var _ = time.Now
