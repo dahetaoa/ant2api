@@ -1,0 +1,247 @@
+LOG BASE64 TRUNCATION - SUPPLEMENTARY FIX
+
+ISSUE ANALYSIS
+==============
+The current implementation has the following gaps:
+
+1. MISSING: OpenAI format image_url.url field
+   - Client requests in OpenAI format use: {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
+   - The url field contains base64 data but is not under inlineData context
+
+2. MISSING: Content field with markdown images
+   - Assistant responses in OpenAI format may contain: {"content": "![image](data:image/jpeg;base64,...)"}
+   - The content field contains embedded base64 but is not detected as inlineData
+
+3. MISSING: Source field in Claude format
+   - Claude format may use: {"type": "image", "source": {"type": "base64", "data": "..."}}
+   - The data field is inside source, not inlineData
+
+4. CURRENT LIMITATION: Only detects known base64 prefixes for standalone strings
+   - Prefixes checked: /9j/, iVBOR, R0lGOD, UklGR, Qk1, AAAA
+   - May miss other legitimate base64 data
+
+5. POTENTIAL ISSUE: Nested structures may have base64 in unexpected fields
+   - Any field value that contains ";base64," pattern should be truncated
+   - Any field named "data" inside media-related objects should be truncated
+
+AFFECTED LOG LOCATIONS
+======================
+All logging functions are affected because they all flow through:
+- printJSON (line 250) -> sanitizeJSONForLog
+- formatRawJSON (line 260) -> sanitizeJSONForLog
+
+These functions are used by:
+- ClientRequest (line 97) - rawJSON via formatRawJSON
+- ClientResponse (line 109) - body via printJSON
+- BackendRequest (line 127) - rawJSON via formatRawJSON
+- BackendResponse (line 184) - body via printJSON
+- BackendStreamResponse (line 200) - body via printJSON
+- ClientStreamResponse (line 216) - body via printJSON
+- ClientRequestWithHeaders (line 139) - rawJSON via formatRawJSON
+- BackendRequestWithHeaders (line 155) - rawJSON via formatRawJSON
+
+IMPLEMENTATION PLAN
+==================
+
+STEP 1: Update sanitizeJSONForLogContext to handle more data contexts
+----------------------------------------------------------------------
+File: internal/logger/logger.go
+Location: Lines 335-377
+
+Current logic only handles inInlineData context. Expand to handle:
+1. "image_url" parent key -> child "url" field should be truncated
+2. "source" parent key with "type"="base64" -> child "data" field should be truncated
+3. Any string field containing ";base64," pattern should be truncated
+
+Modify the map[string]any case (lines 337-352):
+
+Pseudocode:
+case map[string]any:
+    out := make(map[string]any, len(val))
+    
+    // Detect context for child processing
+    childContextInlineData := inInlineData
+    isImageUrlContext := false
+    isSourceBase64Context := false
+    
+    // Check if this is an image_url object
+    if _, hasUrl := val["url"]; hasUrl {
+        // Could be image_url context
+        isImageUrlContext = true
+    }
+    
+    // Check if this is a source object with type=base64
+    if typeVal, hasType := val["type"]; hasType {
+        if typeStr, ok := typeVal.(string); ok && typeStr == "base64" {
+            isSourceBase64Context = true
+        }
+    }
+    
+    for k, child := range val {
+        // Handle inlineData context
+        if k == "inlineData" {
+            out[k] = sanitizeJSONForLogContext(child, true)
+            continue
+        }
+        
+        // Handle image_url context - truncate the url field
+        if k == "image_url" {
+            out[k] = sanitizeJSONForLogContext(child, false) // will be processed with isImageUrlContext
+            continue
+        }
+        
+        // Truncate "data" field in inlineData or source(base64) context
+        if k == "data" && (inInlineData || isSourceBase64Context) {
+            if s, ok := child.(string); ok {
+                out[k] = truncateBase64Maybe(s, true)
+                continue
+            }
+        }
+        
+        // Truncate "url" field if it looks like a data URL
+        if k == "url" {
+            if s, ok := child.(string); ok {
+                if strings.Contains(s, ";base64,") {
+                    out[k] = truncateBase64Maybe(s, true)
+                    continue
+                }
+            }
+        }
+        
+        // Recursively process other fields
+        out[k] = sanitizeJSONForLogContext(child, childContextInlineData)
+    }
+    return out
+
+Constraints:
+- Must handle nested structures correctly
+- Must not break existing inlineData detection
+- Add detection for image_url.url and source.data patterns
+
+STEP 2: Improve base64 detection in truncateBase64Maybe for universal coverage
+-------------------------------------------------------------------------------
+File: internal/logger/logger.go
+Location: Lines 278-329
+
+Add additional detection patterns:
+1. Any string longer than 100 chars that looks like base64 (only alphanumeric + /+=)
+2. Strings containing ";base64," anywhere (data URLs)
+
+Update the isBase64 detection section (around lines 312-321):
+
+Pseudocode addition (insert before the prefix check):
+// Universal base64 pattern check: long strings with only base64 chars
+if !isBase64 && len(s) > 200 {
+    // Check if string looks like base64 (only contains A-Za-z0-9+/=)
+    looksLikeBase64 := true
+    sampleLen := 100
+    if len(s) < sampleLen {
+        sampleLen = len(s)
+    }
+    for i := 0; i < sampleLen; i++ {
+        c := s[i]
+        if !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || 
+             (c >= '0' && c <= '9') || c == '+' || c == '/' || c == '=') {
+            looksLikeBase64 = false
+            break
+        }
+    }
+    if looksLikeBase64 {
+        isBase64 = true
+    }
+}
+
+Constraints:
+- Only apply character-based detection for strings longer than 200 chars
+- Sample first 100 characters for efficiency
+- Must still allow normal text to pass through
+
+STEP 3: Handle content field with markdown images
+-------------------------------------------------
+File: internal/logger/logger.go
+Location: Inside sanitizeJSONForLogContext, in the map[string]any case
+
+Add special handling for "content" field that may contain markdown images:
+
+Pseudocode addition:
+// Handle "content" field which may contain markdown images
+if k == "content" {
+    if s, ok := child.(string); ok {
+        if strings.Contains(s, "![image](data:") && strings.Contains(s, ";base64,") {
+            out[k] = truncateBase64Maybe(s, true)
+            continue
+        }
+    }
+}
+
+Constraints:
+- Only truncate content field if it contains the markdown image pattern
+- Normal text content should pass through unchanged
+
+STEP 4: Handle any field containing ;base64, pattern universally
+----------------------------------------------------------------
+File: internal/logger/logger.go
+Location: Inside sanitizeJSONForLogContext, in the string case (line 359-360)
+
+Current code:
+case string:
+    return truncateBase64Maybe(val, inInlineData)
+
+Modify to detect data URL pattern:
+case string:
+    // Force truncation if string contains data URL pattern
+    if strings.Contains(val, ";base64,") && len(val) > 100 {
+        return truncateBase64Maybe(val, true)
+    }
+    return truncateBase64Maybe(val, inInlineData)
+
+Constraints:
+- Any string containing ";base64," should be force-truncated
+- Must still respect the 100 character minimum length
+
+TESTING GUIDANCE
+================
+After implementation, verify base64 truncation in ALL these scenarios:
+
+1. CLIENT REQUEST (OpenAI format):
+   {"messages": [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBOR..."}}]}]}
+   -> url field should be truncated
+
+2. CLIENT REQUEST (Gemini format):
+   {"contents": [{"parts": [{"inlineData": {"mimeType": "image/jpeg", "data": "/9j/..."}}]}]}
+   -> data field should be truncated (ALREADY WORKING)
+
+3. CLIENT REQUEST (Claude format):
+   {"messages": [{"content": [{"type": "image", "source": {"type": "base64", "data": "iVBOR..."}}]}]}
+   -> data field should be truncated
+
+4. BACKEND REQUEST:
+   Same patterns as above should be truncated
+
+5. CLIENT RESPONSE (OpenAI format with markdown):
+   {"content": "Here is the image: ![image](data:image/jpeg;base64,/9j/...)"}
+   -> content field should be truncated
+
+6. BACKEND RESPONSE (Gemini/Vertex format):
+   {"response": {"candidates": [{"content": {"parts": [{"inlineData": {"data": "..."}}]}}]}}
+   -> data field should be truncated (ALREADY WORKING)
+
+7. STREAMING RESPONSES:
+   Same patterns should be truncated
+
+Build test: go build ./...
+
+SUMMARY OF CHANGES
+==================
+1. Expand context detection in sanitizeJSONForLogContext for image_url and source objects
+2. Add universal base64 character pattern detection for long strings
+3. Handle content field with embedded markdown images
+4. Force truncation for any string containing ";base64," pattern
+
+DO NOT
+======
+- Do NOT break existing inlineData detection
+- Do NOT truncate short strings (< 100 chars)
+- Do NOT truncate normal text content that doesn't contain base64
+- Do NOT modify actual request/response data
+- Do NOT change log formatting or colors

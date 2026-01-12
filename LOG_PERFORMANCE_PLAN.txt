@@ -1,0 +1,244 @@
+LOG PERFORMANCE OPTIMIZATION PLAN
+
+OBJECTIVE
+=========
+When debug is disabled (DEBUG="" or DEBUG="off"), completely skip log-related processing logic to save CPU and memory overhead. The logging functions already check log level before printing, but the data preparation (JSON marshaling, response collecting, merging) still runs.
+
+PROBLEM ANALYSIS
+================
+The main performance overhead comes from:
+
+1. EVENT COLLECTION IN STREAMING (highest overhead):
+   - File: internal/gateway/openai/stream.go
+   - Location: writeSSEDataAndCollect (lines 192-200)
+   - Issue: Every SSE chunk is unmarshaled and appended to collectedEvents array
+   - This runs even when DEBUG=off because GetMergedResponse() might be called
+
+2. MERGED RESPONSE BUILDING:
+   - File: internal/vertex/stream.go
+   - Location: ParseStreamWithResult (lines 49-181)
+   - Issue: mergedParts array accumulation and mergeParts() processing
+   - This always runs regardless of debug level
+
+3. GETMERGEDRESPONSE CALLS:
+   - Files: All three gateway handlers
+   - Issue: GetMergedResponse() is called unconditionally before logger calls
+   - The logger checks log level internally, but preparation work is already done
+
+AFFECTED LOCATIONS
+==================
+1. internal/gateway/openai/handler.go lines 143-144
+2. internal/gateway/openai/stream.go lines 192-200 (writeSSEDataAndCollect)
+3. internal/gateway/openai/stream.go lines 216-289 (GetMergedResponse)
+4. internal/gateway/claude/handler.go lines 121-122
+5. internal/gateway/gemini/handler.go lines 521-522
+6. internal/vertex/stream.go lines 68-71, 123-133 (mergedParts accumulation)
+
+IMPLEMENTATION PLAN
+==================
+
+STEP 1: Export log level check function
+---------------------------------------
+File: internal/logger/logger.go
+Location: After line 53
+
+Add exported helper functions to check if logging is enabled:
+
+func IsClientLogEnabled() bool {
+    return currentLogLevel >= LogLow
+}
+
+func IsBackendLogEnabled() bool {
+    return currentLogLevel >= LogHigh
+}
+
+Constraints:
+- Functions must be exported (capital first letter)
+- Functions should be cheap to call (just compare integers)
+
+STEP 2: Conditionally collect events in OpenAI StreamWriter
+------------------------------------------------------------
+File: internal/gateway/openai/stream.go
+Location: Lines 192-200 (writeSSEDataAndCollect function)
+
+Current code collects events unconditionally:
+func (sw *StreamWriter) writeSSEDataAndCollect(v any) error {
+    b, err := jsonpkg.Marshal(v)
+    if err != nil {
+        return err
+    }
+
+    var event map[string]any
+    if err := jsonpkg.Unmarshal(b, &event); err == nil {
+        sw.collectedEvents = append(sw.collectedEvents, event)
+    }
+    ...
+}
+
+Modify to only collect when logging is enabled:
+func (sw *StreamWriter) writeSSEDataAndCollect(v any) error {
+    b, err := jsonpkg.Marshal(v)
+    if err != nil {
+        return err
+    }
+
+    // Only collect events when client logging is enabled
+    if logger.IsClientLogEnabled() {
+        var event map[string]any
+        if err := jsonpkg.Unmarshal(b, &event); err == nil {
+            sw.collectedEvents = append(sw.collectedEvents, event)
+        }
+    }
+    ...
+}
+
+Constraints:
+- The JSON marshaling for b must still happen (needed for SSE output)
+- Only skip the unmarshal and collect part
+- Import logger package if not already imported
+
+STEP 3: Short-circuit GetMergedResponse when logging disabled
+--------------------------------------------------------------
+File: internal/gateway/openai/stream.go
+Location: Lines 216-289 (GetMergedResponse function)
+
+Add early return when logging is disabled:
+
+func (sw *StreamWriter) GetMergedResponse() []any {
+    // Short-circuit if logging is disabled
+    if !logger.IsClientLogEnabled() {
+        return nil
+    }
+    
+    sw.mu.Lock()
+    defer sw.mu.Unlock()
+    // ... rest of existing code
+}
+
+Constraints:
+- Return nil (or empty slice) when logging is disabled
+- The caller (logger.ClientStreamResponse) already checks log level before printing
+
+STEP 4: Conditionally build merged response in vertex stream parser
+--------------------------------------------------------------------
+File: internal/vertex/stream.go
+Location: Lines 68-71, 123-133
+
+The mergedParts accumulation and the final MergedResponse building should be conditional.
+
+Add a field or check to skip this work when logging is disabled:
+
+Option A: Pass a flag to ParseStreamWithResult
+Option B: Check log level inside the function
+
+Recommended: Option B (simpler, no API change)
+
+Modify ParseStreamWithResult:
+1. At the start, check if backend logging is enabled:
+   buildMerged := logger.IsBackendLogEnabled()
+
+2. Only accumulate mergedParts if buildMerged is true (line 128):
+   if buildMerged {
+       mergedParts = append(mergedParts, parts...)
+   }
+
+3. Only build MergedResponse if buildMerged is true (lines 165-178):
+   if buildMerged {
+       result.MergedResponse = map[string]any{...}
+   }
+
+Constraints:
+- Import logger package
+- The function must still return other fields (Text, Thinking, FinishReason, Usage, ToolCalls)
+- Only skip mergedParts and MergedResponse building
+
+STEP 5: Conditionally call logger in handler files
+--------------------------------------------------
+While the logger functions already check log level internally, we can avoid preparing arguments when logging is disabled.
+
+Files to modify:
+- internal/gateway/openai/handler.go lines 143-144
+- internal/gateway/claude/handler.go lines 121-122
+- internal/gateway/gemini/handler.go lines 521-522
+
+Change pattern from:
+logger.BackendStreamResponse(http.StatusOK, duration, streamResult.MergedResponse)
+logger.ClientStreamResponse(http.StatusOK, duration, writer.GetMergedResponse())
+
+To:
+if logger.IsBackendLogEnabled() {
+    logger.BackendStreamResponse(http.StatusOK, duration, streamResult.MergedResponse)
+}
+if logger.IsClientLogEnabled() {
+    logger.ClientStreamResponse(http.StatusOK, duration, writer.GetMergedResponse())
+}
+
+This ensures GetMergedResponse() is not called when logging is disabled.
+
+Constraints:
+- Apply this pattern to all three handlers
+- Use appropriate log level check (Backend for backend logs, Client for client logs)
+
+STEP 6: Apply same pattern to Claude emitter
+--------------------------------------------
+File: internal/gateway/claude/emitter.go (if exists) or claude stream handling
+
+Apply the same optimizations as OpenAI stream writer:
+- Conditionally collect events
+- Short-circuit GetMergedResponse
+
+Check if Claude has similar event collection logic and apply the same pattern.
+
+STEP 7: Apply same pattern to Gemini handler
+--------------------------------------------
+File: internal/gateway/gemini/handler.go
+
+The Gemini handler does inline stream processing. Check lines 461-517 for mergedParts accumulation.
+
+Apply conditional logic:
+if logger.IsBackendLogEnabled() {
+    mergedParts = append(mergedParts, parts...)
+}
+
+And only build mergedResp (lines 505-513) when logging is enabled.
+
+TESTING GUIDANCE
+================
+After implementation, verify:
+
+1. Build succeeds: go build ./...
+
+2. With DEBUG=high:
+   - All logs appear as before
+   - No functionality regression
+
+3. With DEBUG=low:
+   - Client logs appear
+   - Backend logs do not appear
+   - No functionality regression
+
+4. With DEBUG=off or DEBUG="" (empty):
+   - No logs appear
+   - No performance overhead from log preparation
+   - Verify with profiling if possible
+
+5. Verify streaming works correctly in all modes:
+   - OpenAI endpoint
+   - Claude endpoint
+   - Gemini endpoint
+
+PERFORMANCE IMPACT
+==================
+Expected improvements when DEBUG=off:
+- Eliminate JSON unmarshal for every SSE chunk (significant for long streams)
+- Eliminate mergedParts array accumulation
+- Eliminate GetMergedResponse() processing
+- Reduce memory allocation
+
+DO NOT
+======
+- Do NOT break streaming functionality
+- Do NOT change log output format when logging is enabled
+- Do NOT affect non-streaming request/response handling
+- Do NOT remove any functionality, only add conditional checks
+- Do NOT change the public API of logging functions

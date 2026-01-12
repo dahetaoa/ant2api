@@ -2,7 +2,6 @@ package logger
 
 import (
 	"anti2api-golang/refactor/internal/config"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -249,7 +248,8 @@ func Banner(port int, endpointMode string) {
 }
 
 func printJSON(v any) {
-	jsonBytes, err := json.MarshalIndent(v, "", "  ")
+	sanitized := sanitizeJSONForLog(v)
+	jsonBytes, err := json.MarshalIndent(sanitized, "", "  ")
 	if err != nil {
 		fmt.Printf("%v\n", v)
 		return
@@ -258,9 +258,169 @@ func printJSON(v any) {
 }
 
 func formatRawJSON(rawJSON []byte) string {
-	var indented bytes.Buffer
-	if err := json.Indent(&indented, rawJSON, "", "  "); err != nil {
+	var data any
+	if err := json.Unmarshal(rawJSON, &data); err != nil {
 		return string(rawJSON)
 	}
-	return indented.String()
+
+	sanitized := sanitizeJSONForLog(data)
+	jsonBytes, err := json.MarshalIndent(sanitized, "", "  ")
+	if err != nil {
+		return string(rawJSON)
+	}
+	return string(jsonBytes)
+}
+
+func truncateBase64(s string) string {
+	return truncateBase64Maybe(s, false)
+}
+
+func truncateBase64Maybe(s string, force bool) string {
+	if len(s) <= 100 {
+		return s
+	}
+
+	const keep = 20
+	const markerFmt = "%s...[TRUNCATED: %d chars]...%s"
+
+	// Handle data URLs or embedded base64 sections like:
+	// - data:image/png;base64,iVBOR...
+	// - ![image](data:image/jpeg;base64,/9j/...)  (markdown wrapper)
+	if strings.Contains(s, ";base64,") {
+		idx := strings.Index(s, ";base64,")
+		if idx != -1 {
+			prefix := s[:idx+len(";base64,")]
+			rest := s[idx+len(";base64,"):]
+
+			// If this looks like markdown, keep trailing ')' (and anything after) intact.
+			base64Part := rest
+			suffix := ""
+			if end := strings.Index(rest, ")"); end != -1 {
+				base64Part = rest[:end]
+				suffix = rest[end:]
+			}
+
+			if len(base64Part) <= 100 || len(base64Part) <= keep*2 {
+				return s
+			}
+
+			omitted := len(base64Part) - keep*2
+			return fmt.Sprintf("%s%s...[TRUNCATED: %d chars]...%s%s", prefix, base64Part[:keep], omitted, base64Part[len(base64Part)-keep:], suffix)
+		}
+	}
+
+	isBase64 := force
+	if !isBase64 {
+		// Universal base64 character check for very long strings.
+		// Only sample the first 100 characters for performance.
+		if len(s) > 200 {
+			sampleLen := 100
+			if len(s) < sampleLen {
+				sampleLen = len(s)
+			}
+			looksLikeBase64 := true
+			for i := 0; i < sampleLen; i++ {
+				c := s[i]
+				if !((c >= 'A' && c <= 'Z') ||
+					(c >= 'a' && c <= 'z') ||
+					(c >= '0' && c <= '9') ||
+					c == '+' || c == '/' || c == '=') {
+					looksLikeBase64 = false
+					break
+				}
+			}
+			if looksLikeBase64 {
+				isBase64 = true
+			}
+		}
+	}
+	if !isBase64 {
+		prefixes := []string{"/9j/", "iVBOR", "R0lGOD", "UklGR", "Qk1", "AAAA"}
+		for _, p := range prefixes {
+			if strings.HasPrefix(s, p) {
+				isBase64 = true
+				break
+			}
+		}
+	}
+
+	if !isBase64 || len(s) <= keep*2 {
+		return s
+	}
+
+	omitted := len(s) - keep*2
+	return fmt.Sprintf(markerFmt, s[:keep], omitted, s[len(s)-keep:])
+}
+
+func sanitizeJSONForLog(v any) any {
+	return sanitizeJSONForLogContext(v, false)
+}
+
+func sanitizeJSONForLogContext(v any, inInlineData bool) any {
+	switch val := v.(type) {
+	case map[string]any:
+		isSourceBase64Context := false
+		if t, ok := val["type"].(string); ok && strings.TrimSpace(t) == "base64" {
+			isSourceBase64Context = true
+		}
+
+		out := make(map[string]any, len(val))
+		for k, child := range val {
+			if k == "inlineData" {
+				out[k] = sanitizeJSONForLogContext(child, true)
+				continue
+			}
+			if k == "data" && (inInlineData || isSourceBase64Context) {
+				if s, ok := child.(string); ok {
+					out[k] = truncateBase64Maybe(s, true)
+					continue
+				}
+			}
+			if k == "url" {
+				if s, ok := child.(string); ok {
+					if strings.Contains(s, ";base64,") && len(s) > 100 {
+						out[k] = truncateBase64Maybe(s, true)
+						continue
+					}
+				}
+			}
+			if k == "content" {
+				if s, ok := child.(string); ok {
+					if strings.Contains(s, "![image](data:") && strings.Contains(s, ";base64,") && len(s) > 100 {
+						out[k] = truncateBase64Maybe(s, true)
+						continue
+					}
+				}
+			}
+			out[k] = sanitizeJSONForLogContext(child, inInlineData)
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, item := range val {
+			out[i] = sanitizeJSONForLogContext(item, inInlineData)
+		}
+		return out
+	case string:
+		if strings.Contains(val, ";base64,") && len(val) > 100 {
+			return truncateBase64Maybe(val, true)
+		}
+		return truncateBase64Maybe(val, inInlineData)
+	case nil, bool,
+		float64, float32,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64:
+		return v
+	default:
+		// Support structs/custom types logged via printJSON (e.g., OpenAI/Gemini/Claude response structs).
+		b, err := json.Marshal(val)
+		if err != nil {
+			return v
+		}
+		var decoded any
+		if err := json.Unmarshal(b, &decoded); err != nil {
+			return v
+		}
+		return sanitizeJSONForLogContext(decoded, inInlineData)
+	}
 }

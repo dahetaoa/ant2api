@@ -1,0 +1,268 @@
+LOG BASE64 TRUNCATION PLAN
+
+OBJECTIVE
+=========
+Truncate base64 data in log output to prevent log flooding while preserving useful information. When base64 data is encountered in logs, only display the first 20 characters and last 20 characters, with an indicator showing that content was truncated. This must apply to all three API endpoints (OpenAI, Gemini, Claude).
+
+PROBLEM ANALYSIS
+================
+1. The current logging system in internal/logger/logger.go outputs full JSON data including base64 encoded images.
+
+2. Base64 image data can be extremely long (hundreds of thousands of characters), making logs unreadable.
+
+3. The main output functions are:
+   - printJSON (line 251-258): used by ClientResponse, BackendResponse, BackendStreamResponse, ClientStreamResponse
+   - formatRawJSON (line 260-266): used by ClientRequest, BackendRequest, ClientRequestWithHeaders, BackendRequestWithHeaders
+
+4. Base64 data appears in JSON fields like:
+   - inlineData.data (Vertex API format)
+   - image_url.url with data:image/...;base64,... (OpenAI format)
+   - Markdown format: ![image](data:...;base64,...)
+
+EXPECTED OUTPUT FORMAT
+======================
+When a base64 string is detected, it should be truncated to show:
+[first 20 chars]...[TRUNCATED: XXX chars]...[last 20 chars]
+
+Example:
+Original: "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRof..."
+Truncated: "/9j/4AAQSkZJRgABAQEA...[TRUNCATED: 123456 chars]...gABIAAD/2wBDAAgGBg"
+
+BASE64 DETECTION CRITERIA
+=========================
+A string should be considered base64 data if:
+1. Length is greater than 100 characters (to avoid false positives on short strings)
+2. AND matches one of these patterns:
+   - Starts with common image base64 prefixes: /9j/ (JPEG), iVBOR (PNG), R0lGOD (GIF), UklGR (WEBP)
+   - OR is a value of a field named "data" inside "inlineData" object
+   - OR appears after "base64," in a data URL
+
+IMPLEMENTATION PLAN
+==================
+
+STEP 1: Create base64 truncation helper function
+------------------------------------------------
+File: internal/logger/logger.go
+Location: After line 266 (end of file)
+
+Add a new function truncateBase64 that:
+1. Takes a string as input
+2. Checks if it looks like base64 data (length > 100 and matches known patterns)
+3. If so, returns truncated version with first 20 and last 20 chars
+4. If not, returns original string unchanged
+
+Pseudocode:
+func truncateBase64(s string) string {
+    if len(s) <= 100 {
+        return s
+    }
+    
+    // Check for common base64 image prefixes
+    isBase64 := false
+    prefixes := []string{"/9j/", "iVBOR", "R0lGOD", "UklGR", "Qk1", "AAAA"}
+    for _, prefix := range prefixes {
+        if strings.HasPrefix(s, prefix) {
+            isBase64 = true
+            break
+        }
+    }
+    
+    // Also check for data URL pattern
+    if !isBase64 && strings.Contains(s, ";base64,") {
+        isBase64 = true
+    }
+    
+    if !isBase64 {
+        return s
+    }
+    
+    if len(s) <= 50 {
+        return s
+    }
+    
+    truncatedLen := len(s) - 40
+    return fmt.Sprintf("%s...[TRUNCATED: %d chars]...%s", s[:20], truncatedLen, s[len(s)-20:])
+}
+
+Constraints:
+- The threshold for truncation must be 100 characters minimum
+- Always show exactly 20 characters at start and 20 at end
+- The truncation indicator must include the count of omitted characters
+- Do NOT truncate strings that don't match base64 patterns
+
+STEP 2: Create recursive JSON sanitizer function
+------------------------------------------------
+File: internal/logger/logger.go
+Location: After the truncateBase64 function
+
+Add a function sanitizeJSONForLog that recursively walks through a JSON object/array and truncates base64 strings.
+
+Pseudocode:
+func sanitizeJSONForLog(v any) any {
+    switch val := v.(type) {
+    case map[string]any:
+        result := make(map[string]any, len(val))
+        for k, v := range val {
+            // Special handling for inlineData.data field
+            if k == "data" {
+                if parent, ok := v.(string); ok {
+                    result[k] = truncateBase64(parent)
+                    continue
+                }
+            }
+            result[k] = sanitizeJSONForLog(v)
+        }
+        return result
+    case []any:
+        result := make([]any, len(val))
+        for i, item := range val {
+            result[i] = sanitizeJSONForLog(item)
+        }
+        return result
+    case string:
+        return truncateBase64(val)
+    default:
+        return v
+    }
+}
+
+Constraints:
+- Must handle nested structures recursively
+- Must handle both map[string]any and []any types
+- Must preserve the structure of the original JSON
+- Must not modify the original data, create copies
+
+STEP 3: Modify printJSON to use sanitizer
+-----------------------------------------
+File: internal/logger/logger.go
+Location: Lines 251-258
+
+Current code:
+func printJSON(v any) {
+    jsonBytes, err := json.MarshalIndent(v, "", "  ")
+    if err != nil {
+        fmt.Printf("%v\n", v)
+        return
+    }
+    fmt.Println(string(jsonBytes))
+}
+
+Modify to:
+func printJSON(v any) {
+    sanitized := sanitizeJSONForLog(v)
+    jsonBytes, err := json.MarshalIndent(sanitized, "", "  ")
+    if err != nil {
+        fmt.Printf("%v\n", v)
+        return
+    }
+    fmt.Println(string(jsonBytes))
+}
+
+Constraints:
+- Only add the sanitization step, do NOT change other behavior
+- Keep error handling unchanged
+- The sanitized version is only for display, not for actual data
+
+STEP 4: Modify formatRawJSON to use sanitizer
+---------------------------------------------
+File: internal/logger/logger.go
+Location: Lines 260-266
+
+Current code:
+func formatRawJSON(rawJSON []byte) string {
+    var indented bytes.Buffer
+    if err := json.Indent(&indented, rawJSON, "", "  "); err != nil {
+        return string(rawJSON)
+    }
+    return indented.String()
+}
+
+Modify to parse, sanitize, and re-serialize:
+
+func formatRawJSON(rawJSON []byte) string {
+    var data any
+    if err := json.Unmarshal(rawJSON, &data); err != nil {
+        return string(rawJSON)
+    }
+    
+    sanitized := sanitizeJSONForLog(data)
+    
+    jsonBytes, err := json.MarshalIndent(sanitized, "", "  ")
+    if err != nil {
+        return string(rawJSON)
+    }
+    return string(jsonBytes)
+}
+
+Constraints:
+- If unmarshal fails, fall back to original behavior (return raw string)
+- If re-marshal fails, fall back to original raw string
+- The sanitized output should still be valid, pretty-printed JSON
+
+STEP 5: Handle data URL pattern in strings
+------------------------------------------
+The truncateBase64 function should also handle data URLs embedded in strings.
+
+Update the truncateBase64 function to detect and handle data URLs:
+
+Pseudocode addition:
+// For data URLs like: data:image/png;base64,iVBORw0KG...
+if strings.Contains(s, ";base64,") {
+    idx := strings.Index(s, ";base64,")
+    if idx != -1 {
+        prefix := s[:idx+8] // "data:image/xxx;base64,"
+        base64Part := s[idx+8:]
+        if len(base64Part) > 50 {
+            truncatedLen := len(base64Part) - 40
+            return fmt.Sprintf("%s%s...[TRUNCATED: %d chars]...%s", 
+                prefix, base64Part[:20], truncatedLen, base64Part[len(base64Part)-20:])
+        }
+    }
+}
+
+Constraints:
+- Preserve the data URL prefix (data:image/xxx;base64,)
+- Only truncate the base64 portion after the prefix
+- Handle both standalone base64 and embedded in data URLs
+
+TESTING GUIDANCE
+================
+After implementation, verify:
+1. Build succeeds with no errors: go build ./...
+2. Normal text logs are not affected
+3. Short strings (< 100 chars) are not truncated
+4. Long base64 strings show first 20 and last 20 chars
+5. Truncation indicator shows correct character count
+6. JSON structure is preserved (no broken JSON in logs)
+7. Works for all three endpoints: OpenAI, Gemini, Claude
+8. Works for both request and response logs
+9. Works for streaming and non-streaming responses
+10. Data URL format (data:image/...;base64,...) is handled correctly
+
+EXAMPLE OUTPUT
+==============
+Before (flooding):
+{
+  "inlineData": {
+    "mimeType": "image/jpeg",
+    "data": "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIy... [300000 more characters]"
+  }
+}
+
+After (readable):
+{
+  "inlineData": {
+    "mimeType": "image/jpeg", 
+    "data": "/9j/4AAQSkZJRgABAQEA...[TRUNCATED: 299960 chars]...DL/2wBDAQkJCQwLDBg"
+  }
+}
+
+DO NOT
+======
+- Do NOT truncate non-base64 strings
+- Do NOT truncate strings shorter than 100 characters
+- Do NOT modify the actual request/response data, only the log display
+- Do NOT break JSON structure in logs
+- Do NOT remove any existing logging functionality
+- Do NOT change log colors or formatting
+- Do NOT affect log levels or when logs are shown
