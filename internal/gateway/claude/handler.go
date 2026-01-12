@@ -20,7 +20,9 @@ func HandleMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, body)
+	if logger.IsClientLogEnabled() {
+		logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, body)
+	}
 
 	var req MessagesRequest
 	if err := jsonpkg.Unmarshal(body, &req); err != nil {
@@ -54,13 +56,17 @@ func HandleMessages(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	vresp, err := vertex.GenerateContent(r.Context(), vreq, acc.AccessToken)
 	if err != nil {
-		logger.ClientResponse(statusFromVertexErr(err), time.Since(startTime), err.Error())
+		if logger.IsClientLogEnabled() {
+			logger.ClientResponse(statusFromVertexErr(err), time.Since(startTime), err.Error())
+		}
 		writeClaudeError(w, statusFromVertexErr(err), err.Error())
 		return
 	}
 
 	out := ToMessagesResponse(vresp, requestID, req.Model, inputTokens)
-	logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
+	if logger.IsClientLogEnabled() {
+		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -71,7 +77,9 @@ func HandleCountTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, body)
+	if logger.IsClientLogEnabled() {
+		logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, body)
+	}
 	// Use same request schema.
 	var req MessagesRequest
 	if err := jsonpkg.Unmarshal(body, &req); err != nil {
@@ -81,7 +89,9 @@ func HandleCountTokens(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	count := estimateTokens(body)
 	out := TokenCountResponse{InputTokens: count, TokenCount: count, Tokens: count}
-	logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
+	if logger.IsClientLogEnabled() {
+		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -118,8 +128,12 @@ func handleStream(w http.ResponseWriter, r *http.Request, req *MessagesRequest, 
 	})
 
 	duration := time.Since(startTime)
-	logger.BackendStreamResponse(http.StatusOK, duration, streamResult.MergedResponse)
-	logger.ClientStreamResponse(http.StatusOK, duration, emitter.GetMergedResponse())
+	if logger.IsBackendLogEnabled() {
+		logger.BackendStreamResponse(http.StatusOK, duration, streamResult.MergedResponse)
+	}
+	if logger.IsClientLogEnabled() {
+		logger.ClientStreamResponse(http.StatusOK, duration, emitter.GetMergedResponse())
+	}
 
 	stopReason := "end_turn"
 	if len(streamResult.ToolCalls) > 0 {

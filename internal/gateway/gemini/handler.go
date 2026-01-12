@@ -233,11 +233,15 @@ func HandleModels(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleListModels(w http.ResponseWriter, r *http.Request) {
-	logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, nil)
+	if logger.IsClientLogEnabled() {
+		logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, nil)
+	}
 	startTime := time.Now()
 	acc, err := credential.GetStore().GetToken()
 	if err != nil {
-		logger.ClientResponse(http.StatusServiceUnavailable, time.Since(startTime), err.Error())
+		if logger.IsClientLogEnabled() {
+			logger.ClientResponse(http.StatusServiceUnavailable, time.Since(startTime), err.Error())
+		}
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": map[string]any{"message": err.Error()}})
 		return
 	}
@@ -251,7 +255,9 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 		if apiErr, ok := err.(*vertex.APIError); ok {
 			status = apiErr.Status
 		}
-		logger.ClientResponse(status, time.Since(startTime), err.Error())
+		if logger.IsClientLogEnabled() {
+			logger.ClientResponse(status, time.Since(startTime), err.Error())
+		}
 		writeJSON(w, status, map[string]any{"error": map[string]any{"message": err.Error()}})
 		return
 	}
@@ -272,7 +278,9 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	out := GeminiModelsResponse{Models: models}
-	logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
+	if logger.IsClientLogEnabled() {
+		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -315,7 +323,9 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, body)
+	if logger.IsClientLogEnabled() {
+		logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, body)
+	}
 	var req GeminiRequest
 	if err := jsonpkg.Unmarshal(body, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "请求 JSON 解析失败，请检查请求体格式。"}})
@@ -367,13 +377,17 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 		if apiErr, ok := err.(*vertex.APIError); ok {
 			status = apiErr.Status
 		}
-		logger.ClientResponse(status, time.Since(startTime), err.Error())
+		if logger.IsClientLogEnabled() {
+			logger.ClientResponse(status, time.Since(startTime), err.Error())
+		}
 		writeJSON(w, status, map[string]any{"error": map[string]any{"message": err.Error()}})
 		return
 	}
 
 	out := &GeminiResponse{Candidates: resp.Response.Candidates, UsageMetadata: resp.Response.UsageMetadata}
-	logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
+	if logger.IsClientLogEnabled() {
+		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -391,7 +405,9 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, body)
+	if logger.IsClientLogEnabled() {
+		logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, body)
+	}
 	var req GeminiRequest
 	if err := jsonpkg.Unmarshal(body, &req); err != nil {
 		vertex.SetStreamHeaders(w)
@@ -464,6 +480,7 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 16*1024*1024)
 
+	buildMerged := logger.IsBackendLogEnabled() || logger.IsClientLogEnabled()
 	var mergedParts []any
 	var lastFinishReason string
 	var lastUsage any
@@ -473,20 +490,22 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(line, "data: ") {
 			jsonData := strings.TrimSpace(line[6:])
 			if jsonData != "[DONE]" && jsonData != "" {
-				var rawChunk map[string]any
-				if jsonpkg.UnmarshalString(jsonData, &rawChunk) == nil {
-					if respMap, ok := rawChunk["response"].(map[string]any); ok {
-						if usage, ok := respMap["usageMetadata"]; ok {
-							lastUsage = usage
-						}
-						if candidates, ok := respMap["candidates"].([]any); ok && len(candidates) > 0 {
-							if cand, ok := candidates[0].(map[string]any); ok {
-								if fr, ok := cand["finishReason"].(string); ok && fr != "" {
-									lastFinishReason = fr
-								}
-								if content, ok := cand["content"].(map[string]any); ok {
-									if parts, ok := content["parts"].([]any); ok {
-										mergedParts = append(mergedParts, parts...)
+				if buildMerged {
+					var rawChunk map[string]any
+					if jsonpkg.UnmarshalString(jsonData, &rawChunk) == nil {
+						if respMap, ok := rawChunk["response"].(map[string]any); ok {
+							if usage, ok := respMap["usageMetadata"]; ok {
+								lastUsage = usage
+							}
+							if candidates, ok := respMap["candidates"].([]any); ok && len(candidates) > 0 {
+								if cand, ok := candidates[0].(map[string]any); ok {
+									if fr, ok := cand["finishReason"].(string); ok && fr != "" {
+										lastFinishReason = fr
+									}
+									if content, ok := cand["content"].(map[string]any); ok {
+										if parts, ok := content["parts"].([]any); ok {
+											mergedParts = append(mergedParts, parts...)
+										}
 									}
 								}
 							}
@@ -508,18 +527,23 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 		logger.Error("Stream scan error: %v", err)
 	}
 
-	mergedResp := map[string]any{
-		"response": map[string]any{
-			"candidates": []any{map[string]any{
-				"content":      map[string]any{"role": "model", "parts": vertex.MergeParts(mergedParts)},
-				"finishReason": lastFinishReason,
-			}},
-			"usageMetadata": lastUsage,
-		},
+	if buildMerged {
+		mergedResp := map[string]any{
+			"response": map[string]any{
+				"candidates": []any{map[string]any{
+					"content":      map[string]any{"role": "model", "parts": vertex.MergeParts(mergedParts)},
+					"finishReason": lastFinishReason,
+				}},
+				"usageMetadata": lastUsage,
+			},
+		}
+		if logger.IsBackendLogEnabled() {
+			logger.BackendStreamResponse(http.StatusOK, duration, mergedResp)
+		}
+		if logger.IsClientLogEnabled() {
+			logger.ClientStreamResponse(http.StatusOK, duration, mergedResp)
+		}
 	}
-
-	logger.BackendStreamResponse(http.StatusOK, duration, mergedResp)
-	logger.ClientStreamResponse(http.StatusOK, duration, mergedResp)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

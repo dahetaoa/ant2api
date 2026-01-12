@@ -7,6 +7,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
+	"anti2api-golang/refactor/internal/logger"
 	"anti2api-golang/refactor/internal/pkg/id"
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
 	"anti2api-golang/refactor/internal/signature"
@@ -195,9 +196,11 @@ func (sw *StreamWriter) writeSSEDataAndCollect(v any) error {
 		return err
 	}
 
-	var event map[string]any
-	if err := jsonpkg.Unmarshal(b, &event); err == nil {
-		sw.collectedEvents = append(sw.collectedEvents, event)
+	if logger.IsClientLogEnabled() {
+		var event map[string]any
+		if err := jsonpkg.Unmarshal(b, &event); err == nil {
+			sw.collectedEvents = append(sw.collectedEvents, event)
+		}
 	}
 
 	if _, err := fmt.Fprintf(sw.w, "data: %s\n\n", b); err != nil {
@@ -227,6 +230,9 @@ func writeSSEData(w http.ResponseWriter, v any) error {
 // original project's logging output. It merges consecutive content/reasoning
 // deltas into single chunk entries for readability.
 func (sw *StreamWriter) GetMergedResponse() []any {
+	if !logger.IsClientLogEnabled() {
+		return nil
+	}
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
 

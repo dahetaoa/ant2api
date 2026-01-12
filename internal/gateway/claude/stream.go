@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"anti2api-golang/refactor/internal/logger"
 	"anti2api-golang/refactor/internal/pkg/id"
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
 	"anti2api-golang/refactor/internal/signature"
@@ -132,6 +133,9 @@ func (e *SSEEmitter) Finish(outputTokens int, stopReason string) error {
 // GetMergedResponse returns a merged view of collected SSE event JSON objects,
 // matching the original project's logging output.
 func (e *SSEEmitter) GetMergedResponse() []any {
+	if !logger.IsClientLogEnabled() {
+		return nil
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -324,9 +328,11 @@ func (e *SSEEmitter) writeSSE(event string, data any) error {
 		return err
 	}
 
-	var eventData map[string]any
-	if err := jsonpkg.Unmarshal(b, &eventData); err == nil {
-		e.collectedEvents = append(e.collectedEvents, eventData)
+	if logger.IsClientLogEnabled() {
+		var eventData map[string]any
+		if err := jsonpkg.Unmarshal(b, &eventData); err == nil {
+			e.collectedEvents = append(e.collectedEvents, eventData)
+		}
 	}
 
 	if _, err := fmt.Fprintf(e.w, "event: %s\ndata: %s\n\n", event, b); err != nil {

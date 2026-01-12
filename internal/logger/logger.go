@@ -52,6 +52,18 @@ func GetLevel() LogLevel {
 	return currentLogLevel
 }
 
+func IsClientLogEnabled() bool {
+	return currentLogLevel >= LogLow
+}
+
+func IsBackendLogEnabled() bool {
+	return currentLogLevel >= LogHigh
+}
+
+func IsAnyLogEnabled() bool {
+	return currentLogLevel > LogOff
+}
+
 func Info(format string, args ...any) {
 	timestamp := time.Now().Format("15:04:05")
 	msg := fmt.Sprintf(format, args...)
@@ -248,6 +260,9 @@ func Banner(port int, endpointMode string) {
 }
 
 func printJSON(v any) {
+	if currentLogLevel == LogOff {
+		return
+	}
 	sanitized := sanitizeJSONForLog(v)
 	jsonBytes, err := json.MarshalIndent(sanitized, "", "  ")
 	if err != nil {
@@ -258,6 +273,9 @@ func printJSON(v any) {
 }
 
 func formatRawJSON(rawJSON []byte) string {
+	if currentLogLevel == LogOff {
+		return ""
+	}
 	var data any
 	if err := json.Unmarshal(rawJSON, &data); err != nil {
 		return string(rawJSON)

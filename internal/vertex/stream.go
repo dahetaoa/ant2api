@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"anti2api-golang/refactor/internal/logger"
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
 )
 
@@ -66,6 +67,8 @@ func ParseStreamWithResult(resp *http.Response, receiver func(data *StreamData) 
 	var textBuilder strings.Builder
 	var thinkingBuilder strings.Builder
 
+	buildMerged := logger.IsBackendLogEnabled()
+
 	var rawChunks []map[string]any
 	var mergedParts []any
 	var lastFinishReason string
@@ -95,10 +98,11 @@ func ParseStreamWithResult(resp *http.Response, receiver func(data *StreamData) 
 		}
 
 		var rawChunk map[string]any
-		if err := jsonpkg.UnmarshalString(jsonData, &rawChunk); err != nil {
-			continue
+		if buildMerged {
+			if err := jsonpkg.UnmarshalString(jsonData, &rawChunk); err == nil {
+				rawChunks = append(rawChunks, rawChunk)
+			}
 		}
-		rawChunks = append(rawChunks, rawChunk)
 
 		var data StreamData
 		if err := jsonpkg.UnmarshalString(jsonData, &data); err != nil {
@@ -107,9 +111,11 @@ func ParseStreamWithResult(resp *http.Response, receiver func(data *StreamData) 
 
 		if data.Response.UsageMetadata != nil {
 			result.Usage = data.Response.UsageMetadata
-			if respMap, ok := rawChunk["response"].(map[string]any); ok {
-				if usage, ok := respMap["usageMetadata"]; ok {
-					lastUsage = usage
+			if buildMerged {
+				if respMap, ok := rawChunk["response"].(map[string]any); ok {
+					if usage, ok := respMap["usageMetadata"]; ok {
+						lastUsage = usage
+					}
 				}
 			}
 		}
@@ -121,12 +127,14 @@ func ParseStreamWithResult(resp *http.Response, receiver func(data *StreamData) 
 				lastFinishReason = candidate.FinishReason
 			}
 
-			if respMap, ok := rawChunk["response"].(map[string]any); ok {
-				if candidates, ok := respMap["candidates"].([]any); ok && len(candidates) > 0 {
-					if cand, ok := candidates[0].(map[string]any); ok {
-						if content, ok := cand["content"].(map[string]any); ok {
-							if parts, ok := content["parts"].([]any); ok {
-								mergedParts = append(mergedParts, parts...)
+			if buildMerged {
+				if respMap, ok := rawChunk["response"].(map[string]any); ok {
+					if candidates, ok := respMap["candidates"].([]any); ok && len(candidates) > 0 {
+						if cand, ok := candidates[0].(map[string]any); ok {
+							if content, ok := cand["content"].(map[string]any); ok {
+								if parts, ok := content["parts"].([]any); ok {
+									mergedParts = append(mergedParts, parts...)
+								}
 							}
 						}
 					}
@@ -161,21 +169,22 @@ func ParseStreamWithResult(resp *http.Response, receiver func(data *StreamData) 
 
 	result.Text = textBuilder.String()
 	result.Thinking = thinkingBuilder.String()
-	result.RawChunks = rawChunks
-
-	result.MergedResponse = map[string]any{
-		"response": map[string]any{
-			"candidates": []any{
-				map[string]any{
-					"content": map[string]any{
-						"role":  "model",
-						"parts": mergeParts(mergedParts),
+	if buildMerged {
+		result.RawChunks = rawChunks
+		result.MergedResponse = map[string]any{
+			"response": map[string]any{
+				"candidates": []any{
+					map[string]any{
+						"content": map[string]any{
+							"role":  "model",
+							"parts": mergeParts(mergedParts),
+						},
+						"finishReason": lastFinishReason,
 					},
-					"finishReason": lastFinishReason,
 				},
+				"usageMetadata": lastUsage,
 			},
-			"usageMetadata": lastUsage,
-		},
+		}
 	}
 
 	return result, nil

@@ -16,11 +16,15 @@ import (
 )
 
 func HandleListModels(w http.ResponseWriter, r *http.Request) {
-	logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, nil)
+	if logger.IsClientLogEnabled() {
+		logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, nil)
+	}
 	startTime := time.Now()
 	acc, err := credential.GetStore().GetToken()
 	if err != nil {
-		logger.ClientResponse(http.StatusServiceUnavailable, time.Since(startTime), err.Error())
+		if logger.IsClientLogEnabled() {
+			logger.ClientResponse(http.StatusServiceUnavailable, time.Since(startTime), err.Error())
+		}
 		writeOpenAIError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
@@ -30,7 +34,9 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 
 	vm, err := vertex.FetchAvailableModels(r.Context(), acc.ProjectID, acc.AccessToken)
 	if err != nil {
-		logger.ClientResponse(statusFromVertexErr(err), time.Since(startTime), err.Error())
+		if logger.IsClientLogEnabled() {
+			logger.ClientResponse(statusFromVertexErr(err), time.Since(startTime), err.Error())
+		}
 		writeOpenAIError(w, statusFromVertexErr(err), err.Error())
 		return
 	}
@@ -56,7 +62,9 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out := ModelsResponse{Object: "list", Data: items}
-	logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
+	if logger.IsClientLogEnabled() {
+		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -67,7 +75,9 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, body)
+	if logger.IsClientLogEnabled() {
+		logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, body)
+	}
 
 	var req ChatRequest
 	if err := jsonpkg.Unmarshal(body, &req); err != nil {
@@ -101,13 +111,17 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	vresp, err := vertex.GenerateContent(ctx, vreq, acc.AccessToken)
 	if err != nil {
-		logger.ClientResponse(statusFromVertexErr(err), time.Since(startTime), err.Error())
+		if logger.IsClientLogEnabled() {
+			logger.ClientResponse(statusFromVertexErr(err), time.Since(startTime), err.Error())
+		}
 		writeOpenAIError(w, statusFromVertexErr(err), err.Error())
 		return
 	}
 
 	out := ToChatCompletion(vresp, req.Model, requestID, "")
-	logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
+	if logger.IsClientLogEnabled() {
+		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -140,8 +154,12 @@ func handleStream(w http.ResponseWriter, ctx context.Context, r *http.Request, r
 	})
 
 	duration := time.Since(startTime)
-	logger.BackendStreamResponse(http.StatusOK, duration, streamResult.MergedResponse)
-	logger.ClientStreamResponse(http.StatusOK, duration, writer.GetMergedResponse())
+	if logger.IsBackendLogEnabled() {
+		logger.BackendStreamResponse(http.StatusOK, duration, streamResult.MergedResponse)
+	}
+	if logger.IsClientLogEnabled() {
+		logger.ClientStreamResponse(http.StatusOK, duration, writer.GetMergedResponse())
+	}
 
 	finish := "stop"
 	if streamResult.FinishReason != "" {
