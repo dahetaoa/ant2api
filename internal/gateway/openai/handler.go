@@ -129,7 +129,7 @@ func handleStream(w http.ResponseWriter, ctx context.Context, r *http.Request, r
 		}
 		c := data.Response.Candidates[0]
 		for _, p := range c.Content.Parts {
-			if err := writer.ProcessPart(StreamDataPart{Text: p.Text, FunctionCall: p.FunctionCall, Thought: p.Thought, ThoughtSignature: p.ThoughtSignature}); err != nil {
+			if err := writer.ProcessPart(StreamDataPart{Text: p.Text, FunctionCall: p.FunctionCall, InlineData: p.InlineData, Thought: p.Thought, ThoughtSignature: p.ThoughtSignature}); err != nil {
 				return err
 			}
 		}

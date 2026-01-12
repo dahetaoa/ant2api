@@ -13,6 +13,8 @@ import (
 
 func ToVertexRequest(req *ChatRequest, account *AccountContext) (*vertex.Request, string, error) {
 	modelName := req.Model
+	model := strings.TrimSpace(req.Model)
+	isImageModel := strings.Contains(strings.ToLower(model), "image")
 	requestID := id.RequestID()
 
 	vreq := &vertex.Request{
@@ -38,7 +40,9 @@ func ToVertexRequest(req *ChatRequest, account *AccountContext) (*vertex.Request
 
 	vreq.Request.GenerationConfig = buildGenerationConfig(req)
 	vreq.Request.Contents = vertex.SanitizeContents(toVertexContents(req, requestID))
-	vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+	if !isImageModel {
+		vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+	}
 
 	return vreq, requestID, nil
 }
@@ -114,7 +118,29 @@ func toVertexContents(req *ChatRequest, requestID string) []vertex.Content {
 			}
 
 			if t := getTextContent(m.Content); t != "" {
-				parts = append(parts, vertex.Part{Text: t})
+				images := parseMarkdownImages(t)
+				if len(images) == 0 {
+					parts = append(parts, vertex.Part{Text: t})
+				} else {
+					last := 0
+					for _, img := range images {
+						if img.start > last {
+							if seg := t[last:img.start]; seg != "" {
+								parts = append(parts, vertex.Part{Text: seg})
+							}
+						}
+						parts = append(parts, vertex.Part{
+							InlineData:       &vertex.InlineData{MimeType: img.mimeType, Data: img.data},
+							ThoughtSignature: img.signature,
+						})
+						last = img.end
+					}
+					if last < len(t) {
+						if seg := t[last:]; seg != "" {
+							parts = append(parts, vertex.Part{Text: seg})
+						}
+					}
+				}
 			}
 			for i, tc := range m.ToolCalls {
 				args := parseArgs(tc.Function.Arguments)
@@ -296,10 +322,62 @@ func extractUserParts(content any) []vertex.Part {
 				}
 				urlStr, _ := img["url"].(string)
 				if inline := parseImageURL(urlStr); inline != nil {
-					out = append(out, vertex.Part{InlineData: inline})
+					imageKey := inline.Data
+					if len(imageKey) > 20 {
+						imageKey = imageKey[:20]
+					}
+					sig := ""
+					if e, ok := signature.GetManager().LookupByToolCallID(imageKey); ok {
+						sig = e.Signature
+					}
+					out = append(out, vertex.Part{InlineData: inline, ThoughtSignature: sig})
 				}
 			}
 		}
+	}
+	return out
+}
+
+var markdownImageRe = regexp.MustCompile(`!\[image\]\(data:([^;]+);base64,([^)]+)\)`)
+
+type markdownImage struct {
+	mimeType  string
+	data      string
+	signature string
+	start     int
+	end       int
+}
+
+func parseMarkdownImages(content string) []markdownImage {
+	matches := markdownImageRe.FindAllStringSubmatchIndex(content, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	out := make([]markdownImage, 0, len(matches))
+	for _, m := range matches {
+		if len(m) != 6 {
+			continue
+		}
+		mimeType := content[m[2]:m[3]]
+		base64Data := content[m[4]:m[5]]
+
+		imageKey := base64Data
+		if len(imageKey) > 20 {
+			imageKey = imageKey[:20]
+		}
+		sig := ""
+		if e, ok := signature.GetManager().LookupByToolCallID(imageKey); ok {
+			sig = e.Signature
+		}
+
+		out = append(out, markdownImage{
+			mimeType:  mimeType,
+			data:      base64Data,
+			signature: sig,
+			start:     m[0],
+			end:       m[1],
+		})
 	}
 	return out
 }

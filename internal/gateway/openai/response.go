@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -96,6 +97,19 @@ func ToChatCompletion(resp *vertex.Response, model string, requestID string, ses
 		}
 		if p.Text != "" {
 			content += p.Text
+			continue
+		}
+		if p.InlineData != nil {
+			imageKey := p.InlineData.Data
+			if len(imageKey) > 20 {
+				imageKey = imageKey[:20]
+			}
+			if p.ThoughtSignature != "" {
+				sigMgr.Save(requestID, imageKey, p.ThoughtSignature, pendingReasoning.String(), model)
+				pendingReasoning.Reset()
+			}
+			imageMarkdown := fmt.Sprintf("![image](data:%s;base64,%s)", p.InlineData.MimeType, p.InlineData.Data)
+			content += imageMarkdown
 			continue
 		}
 		if p.FunctionCall != nil {

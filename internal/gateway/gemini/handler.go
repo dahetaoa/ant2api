@@ -352,7 +352,10 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 	if rid := strings.TrimSpace(r.Header.Get("X-Request-ID")); rid != "" {
 		vreq.RequestID = rid
 	}
-	vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+	isImageModel := strings.Contains(strings.ToLower(strings.TrimSpace(model)), "image")
+	if !isImageModel {
+		vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+	}
 	if vreq.Request.SystemInstruction != nil && vreq.Request.SystemInstruction.Role == "" {
 		vreq.Request.SystemInstruction.Role = "user"
 	}
@@ -427,7 +430,10 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 	if rid := strings.TrimSpace(r.Header.Get("X-Request-ID")); rid != "" {
 		vreq.RequestID = rid
 	}
-	vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+	isImageModel := strings.Contains(strings.ToLower(strings.TrimSpace(model)), "image")
+	if !isImageModel {
+		vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+	}
 	if vreq.Request.SystemInstruction != nil && vreq.Request.SystemInstruction.Role == "" {
 		vreq.Request.SystemInstruction.Role = "user"
 	}

@@ -18,25 +18,26 @@ type StreamData struct {
 				Parts []struct {
 					Text             string        `json:"text,omitempty"`
 					FunctionCall     *FunctionCall `json:"functionCall,omitempty"`
+					InlineData       *InlineData   `json:"inlineData,omitempty"`
 					Thought          bool          `json:"thought,omitempty"`
 					ThoughtSignature string        `json:"thoughtSignature,omitempty"`
 				} `json:"parts"`
 			} `json:"content"`
-			FinishReason string        `json:"finishReason,omitempty"`
+			FinishReason string `json:"finishReason,omitempty"`
 		} `json:"candidates"`
 		UsageMetadata *UsageMetadata `json:"usageMetadata,omitempty"`
 	} `json:"response"`
 }
 
 type StreamResult struct {
-	RawChunks       []map[string]any `json:"-"`
-	MergedResponse  map[string]any   `json:"-"`
-	Text            string           `json:"-"`
-	Thinking        string           `json:"-"`
-	FinishReason    string           `json:"-"`
-	Usage           *UsageMetadata   `json:"-"`
-	ToolCalls       []ToolCallInfo   `json:"-"`
-	ThoughtSignature string          `json:"-"`
+	RawChunks        []map[string]any `json:"-"`
+	MergedResponse   map[string]any   `json:"-"`
+	Text             string           `json:"-"`
+	Thinking         string           `json:"-"`
+	FinishReason     string           `json:"-"`
+	Usage            *UsageMetadata   `json:"-"`
+	ToolCalls        []ToolCallInfo   `json:"-"`
+	ThoughtSignature string           `json:"-"`
 }
 
 type ToolCallInfo struct {

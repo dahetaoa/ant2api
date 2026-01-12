@@ -23,7 +23,9 @@ func ToVertexRequest(req *MessagesRequest, account *AccountContext) (*vertex.Req
 		return nil, "", errors.New("messages is required")
 	}
 
-	isClaudeModel := strings.HasPrefix(strings.TrimSpace(req.Model), "claude-")
+	model := strings.TrimSpace(req.Model)
+	isClaudeModel := strings.HasPrefix(model, "claude-")
+	isImageModel := strings.Contains(strings.ToLower(model), "image")
 
 	requestID := id.RequestID()
 	vreq := &vertex.Request{
@@ -53,7 +55,9 @@ func ToVertexRequest(req *MessagesRequest, account *AccountContext) (*vertex.Req
 		return nil, "", err
 	}
 	vreq.Request.Contents = contents
-	vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+	if !isImageModel {
+		vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+	}
 
 	return vreq, requestID, nil
 }

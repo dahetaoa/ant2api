@@ -1,0 +1,408 @@
+OPENAI ENDPOINT IMAGE MODEL RESPONSE FIX PLAN
+
+OBJECTIVE
+=========
+Fix the OpenAI endpoint streaming response for image generation models like gemini-3.0-image so that base64 image data is correctly transmitted to clients in the expected OpenAI chat completion format. Additionally, implement thought signature caching and lookup for image generation using the first 20 characters of base64 data as the lookup key. For image models, bypass the built-in agent system prompt injection across all three endpoints (OpenAI, Gemini, Claude).
+
+PROBLEM ANALYSIS
+================
+1. The vertex StreamData struct at internal/vertex/stream.go lines 14-29 does NOT include InlineData field in its Parts struct. This means when the backend returns image data via inlineData, the stream parser cannot recognize or extract it.
+
+2. The openai StreamDataPart struct at internal/gateway/openai/stream.go lines 16-21 also does NOT include InlineData field.
+
+3. The StreamWriter.ProcessPart method at internal/gateway/openai/stream.go lines 57-109 only handles Text, Thought, and FunctionCall parts. There is no handling for InlineData parts.
+
+4. When image models return inlineData containing base64 encoded images, these are completely ignored by the current implementation.
+
+5. The current signature system uses toolCallID as the lookup key (see internal/signature/manager.go). For image generation there is no toolCallID, so a new key derivation strategy is needed: use the first 20 characters of base64 data.
+
+6. The current implementation injects a built-in agent system prompt (AgentSystemPrompt in internal/vertex/system_prompt.go) for all models in all three endpoints. This is not desired for image models and may interfere with image generation quality.
+
+EXPECTED CLIENT OUTPUT FORMAT
+=============================
+The OpenAI endpoint should output image data as markdown formatted content inside the delta.content field. Example format:
+
+data: {"id":"xxx","object":"chat.completion.chunk","created":xxx,"model":"gemini-3-pro-image-preview","system_fingerprint":null,"choices":[{"delta":{"content":"![image](data:image/jpeg;base64,/9j/...base64data...)"},"logprobs":null,"finish_reason":null,"index":0}],"usage":null}
+
+The full streaming sequence should be:
+1. First chunk with role: {"delta":{"content":"","role":"assistant"}}
+2. Content chunks including text and images as markdown: {"delta":{"content":"..."}}
+3. Final chunk with finish_reason and usage
+
+IMAGE MODEL DETECTION
+=====================
+An image model is identified by checking if the model name contains "image" (case-insensitive).
+Examples of image model names:
+- gemini-3.0-image
+- gemini-3-pro-image-preview
+- gemini-2.5-flash-image
+
+Detection logic:
+isImageModel := strings.Contains(strings.ToLower(model), "image")
+
+IMPLEMENTATION PLAN
+==================
+
+STEP 1: Add InlineData to vertex StreamData struct
+--------------------------------------------------
+File: internal/vertex/stream.go
+Location: Lines 18-23, the Parts struct inside StreamData
+
+Add an InlineData field to the Parts struct:
+- Add field: InlineData *InlineData json:"inlineData,omitempty"
+- The InlineData type already exists in internal/vertex/types.go lines 49-52
+
+Constraints:
+- Do NOT modify any other part of the StreamData struct
+- Do NOT modify the InlineData type definition in types.go
+- The json tag must be inlineData not inline_data
+
+STEP 2: Add InlineData to openai StreamDataPart struct
+-------------------------------------------------------
+File: internal/gateway/openai/stream.go
+Location: Lines 16-21
+
+Add an InlineData field to StreamDataPart:
+- Add field: InlineData *vertex.InlineData
+
+Constraints:
+- Do NOT rename existing fields
+- Do NOT modify field types of existing fields
+
+STEP 3: Modify StreamWriter.ProcessPart to handle InlineData with signature caching
+------------------------------------------------------------------------------------
+File: internal/gateway/openai/stream.go
+Location: Lines 57-109
+
+Add logic to handle InlineData parts. Insert this handling AFTER the Text handling block (line 73) and BEFORE the FunctionCall handling block (line 74).
+
+The logic must:
+1. Check if part.InlineData is not nil
+2. If InlineData exists, derive an imageKey from the first 20 characters of the base64 data (or the entire data if less than 20 chars)
+3. If part.ThoughtSignature is not empty, save the signature to the signature manager using imageKey as the toolCallID parameter
+4. Construct a markdown image string in the format: ![image](data:{mimeType};base64,{data})
+5. Call sw.writeContentLocked with the constructed markdown string
+
+Pseudocode:
+if part.InlineData != nil {
+    imageKey := part.InlineData.Data
+    if len(imageKey) > 20 {
+        imageKey = imageKey[:20]
+    }
+    if part.ThoughtSignature != "" {
+        signature.GetManager().Save(sw.requestID, imageKey, part.ThoughtSignature, sw.pendingReasoning.String(), sw.model)
+        sw.pendingReasoning.Reset()
+    }
+    imageMarkdown := fmt.Sprintf("![image](data:%s;base64,%s)", part.InlineData.MimeType, part.InlineData.Data)
+    return sw.writeContentLocked(imageMarkdown)
+}
+
+Constraints:
+- Use fmt.Sprintf for string formatting and ensure fmt is imported if not already
+- The markdown format must be exactly: ![image](data:MIMETYPE;base64,DATA)
+- The imageKey must be exactly the first 20 characters of the base64 data, not including the mime type prefix
+- Do NOT modify the existing Text, Thought, or FunctionCall handling logic
+- Do NOT add any additional SSE events for images, they must go through the existing content stream mechanism
+- The InlineData handling must return after processing to avoid falling through to FunctionCall handling
+- Import signature package if not already imported
+
+STEP 4: Update handler.go to pass InlineData to ProcessPart
+------------------------------------------------------------
+File: internal/gateway/openai/handler.go
+Location: Line 132
+
+Modify the StreamDataPart construction to include InlineData.
+
+Current code:
+writer.ProcessPart(StreamDataPart{Text: p.Text, FunctionCall: p.FunctionCall, Thought: p.Thought, ThoughtSignature: p.ThoughtSignature})
+
+Change to:
+writer.ProcessPart(StreamDataPart{Text: p.Text, FunctionCall: p.FunctionCall, Thought: p.Thought, ThoughtSignature: p.ThoughtSignature, InlineData: p.InlineData})
+
+Constraints:
+- Only add the InlineData field, do NOT remove or modify any existing fields
+- Ensure the field name exactly matches the StreamDataPart struct field name
+
+STEP 5: Update response.go ToChatCompletion for non-streaming with signature caching
+-------------------------------------------------------------------------------------
+File: internal/gateway/openai/response.go
+Location: Lines 87-137, inside the for loop
+
+Add handling for InlineData parts in the non-streaming response builder. When a part has InlineData, convert it to markdown format and append to the content string. Also cache the thought signature if present.
+
+Insert handling after the text handling block (lines 97-100) and before the FunctionCall handling block (line 101).
+
+Pseudocode:
+if p.InlineData != nil {
+    imageKey := p.InlineData.Data
+    if len(imageKey) > 20 {
+        imageKey = imageKey[:20]
+    }
+    if p.ThoughtSignature != "" {
+        sigMgr.Save(requestID, imageKey, p.ThoughtSignature, pendingReasoning.String(), model)
+        pendingReasoning.Reset()
+    }
+    imageMarkdown := fmt.Sprintf("![image](data:%s;base64,%s)", p.InlineData.MimeType, p.InlineData.Data)
+    content += imageMarkdown
+    continue
+}
+
+Constraints:
+- Use the exact same markdown format as in Step 3
+- Use the exact same imageKey derivation logic as in Step 3 (first 20 chars of base64 data)
+- Append to the content variable, do NOT replace it
+- Include the continue statement to avoid falling through to FunctionCall handling
+- Ensure fmt is imported in response.go if not already
+
+STEP 6: Update convert.go to lookup signatures for image parts in multi-turn conversations
+-------------------------------------------------------------------------------------------
+File: internal/gateway/openai/convert.go
+Location: Lines 273-304, inside the extractUserParts function
+
+When processing user messages that contain image_url parts with base64 data, extract the first 20 characters of the base64 data and look up the cached signature. If found, attach the signature to the corresponding vertex.Part.
+
+Modify the handling of image_url type (lines 292-301):
+1. After parsing the image URL with parseImageURL (line 298), check if the result is not nil
+2. Extract imageKey from the first 20 characters of inline.Data
+3. Look up signature using signature.GetManager().LookupByToolCallID(imageKey)
+4. If signature found, attach it to the Part as ThoughtSignature
+
+Pseudocode for lines 292-301:
+case "image_url":
+    img, ok := m["image_url"].(map[string]any)
+    if !ok {
+        continue
+    }
+    urlStr, _ := img["url"].(string)
+    if inline := parseImageURL(urlStr); inline != nil {
+        imageKey := inline.Data
+        if len(imageKey) > 20 {
+            imageKey = imageKey[:20]
+        }
+        sig := ""
+        if e, ok := signature.GetManager().LookupByToolCallID(imageKey); ok {
+            sig = e.Signature
+        }
+        out = append(out, vertex.Part{InlineData: inline, ThoughtSignature: sig})
+    }
+
+Constraints:
+- Use the exact same imageKey derivation logic (first 20 chars of base64 data)
+- Only modify the image_url case block, do NOT touch other cases
+- Import signature package if not already imported in convert.go
+- The signature lookup uses LookupByToolCallID because we are using imageKey as if it were a toolCallID
+
+STEP 7: Handle assistant message image content in toVertexContents
+------------------------------------------------------------------
+File: internal/gateway/openai/convert.go
+Location: Lines 76-139, the assistant case block
+
+When an assistant message contains image content (which would be present in markdown format in the content field), we need to parse it and reconstruct the InlineData with the signature. However, since the client sends back images as markdown strings within the content, we need to:
+
+1. Parse the assistant message content for markdown image patterns
+2. Extract base64 data from the pattern: ![image](data:mimetype;base64,DATA)
+3. Derive imageKey from first 20 chars of DATA
+4. Look up signature using imageKey
+5. Reconstruct vertex.Part with InlineData and ThoughtSignature
+
+Add a helper function parseMarkdownImages that extracts image data from content string:
+
+Pseudocode for new helper function:
+func parseMarkdownImages(content string) []struct{ mimeType, data, sig string } {
+    regex pattern: !\[image\]\(data:([^;]+);base64,([^)]+)\)
+    for each match:
+        mimeType := match[1]
+        base64Data := match[2]
+        imageKey := base64Data
+        if len(imageKey) > 20 {
+            imageKey = imageKey[:20]
+        }
+        sig := ""
+        if e, ok := signature.GetManager().LookupByToolCallID(imageKey); ok {
+            sig = e.Signature
+        }
+        append to results
+    return results
+}
+
+Then in the assistant case (around line 116-118 where text content is handled):
+1. Get text content
+2. Parse for markdown images
+3. For parts that are images, create vertex.Part with InlineData and ThoughtSignature
+4. For remaining text (non-image portions), create vertex.Part with Text
+
+Constraints:
+- Use regexp to parse markdown image patterns
+- The regex must match exactly: !\[image\]\(data:([^;]+);base64,([^)]+)\)
+- Be careful to handle mixed text and image content correctly
+- Images should be extracted and converted to InlineData parts
+- Non-image text should remain as Text parts
+- Preserve the order of text and images as they appear in the content
+
+STEP 8: Bypass system prompt injection for image models - ALL THREE ENDPOINTS
+------------------------------------------------------------------------------
+For image models, bypass the built-in AgentSystemPrompt injection. This must be implemented in all three gateway endpoints.
+
+STEP 8A: OpenAI Endpoint
+------------------------
+File: internal/gateway/openai/convert.go
+Location: Line 41
+
+Current code:
+vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+
+Modify to conditionally inject:
+
+Pseudocode:
+model := strings.TrimSpace(req.Model)
+isImageModel := strings.Contains(strings.ToLower(model), "image")
+
+if !isImageModel {
+    vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+}
+
+Note: The model variable needs to be available at line 41. You may need to extract it from req.Model at the beginning of ToVertexRequest function (around line 15).
+
+Constraints:
+- Detection must use case-insensitive matching
+- For image models, do NOT call InjectAgentSystemPrompt
+- For image models, pass through client's SystemInstruction as-is (may be nil)
+- For non-image models, continue to inject agent system prompt as before
+
+STEP 8B: Gemini Endpoint - HandleGenerateContent
+-------------------------------------------------
+File: internal/gateway/gemini/handler.go
+Location: Line 355
+
+Current code:
+vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+
+Modify to conditionally inject:
+
+Pseudocode:
+isImageModel := strings.Contains(strings.ToLower(model), "image")
+
+if !isImageModel {
+    vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+}
+
+Note: The model variable is already available from modelFromPath at line 307.
+
+Constraints:
+- Use the same image model detection logic as Step 8A
+- For image models, do NOT call InjectAgentSystemPrompt
+- For non-image models, continue to inject agent system prompt as before
+
+STEP 8C: Gemini Endpoint - HandleStreamGenerateContent
+------------------------------------------------------
+File: internal/gateway/gemini/handler.go
+Location: Line 430
+
+Current code:
+vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+
+Modify to conditionally inject:
+
+Pseudocode:
+isImageModel := strings.Contains(strings.ToLower(model), "image")
+
+if !isImageModel {
+    vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+}
+
+Note: The model variable is already available from modelFromPath at line 378.
+
+Constraints:
+- Use the same image model detection logic as Step 8A and 8B
+- For image models, do NOT call InjectAgentSystemPrompt
+- For non-image models, continue to inject agent system prompt as before
+
+STEP 8D: Claude Endpoint
+------------------------
+File: internal/gateway/claude/convert.go
+Location: Line 56
+
+Current code:
+vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+
+Modify to conditionally inject:
+
+Pseudocode:
+model := strings.TrimSpace(req.Model)
+isImageModel := strings.Contains(strings.ToLower(model), "image")
+
+if !isImageModel {
+    vreq.Request.SystemInstruction = vertex.InjectAgentSystemPrompt(vreq.Request.SystemInstruction)
+}
+
+Note: The model variable can be extracted from req.Model at any point before line 56.
+
+Constraints:
+- Use the same image model detection logic as other endpoints
+- For image models, do NOT call InjectAgentSystemPrompt
+- For non-image models, continue to inject agent system prompt as before
+
+TESTING GUIDANCE
+================
+After implementation, verify:
+1. Build succeeds with no errors: go build ./...
+2. For streaming requests to image models, base64 data appears in delta.content as markdown
+3. For non-streaming requests to image models, base64 data appears in message.content as markdown
+4. Text and image interleaving works correctly when the model returns both
+5. Existing text-only and tool-call functionality remains unchanged
+6. The markdown format is exactly ![image](data:mimetype;base64,base64data)
+7. Thought signatures are correctly cached when image is generated (key = first 20 chars of base64)
+8. Thought signatures are correctly retrieved in multi-turn conversations when client sends back image
+9. The signature lookup uses first 20 chars of base64 data as key, NOT the full base64 string
+10. Multi-turn image editing works: generate image -> client sends back -> signature attaches -> backend accepts
+11. Image models do NOT receive the AgentSystemPrompt in their SystemInstruction (verify for ALL THREE endpoints)
+12. Non-image models continue to receive the AgentSystemPrompt as before (verify for ALL THREE endpoints)
+13. If client provides a system prompt for image model, it is passed through unchanged
+14. If client provides no system prompt for image model, SystemInstruction is nil or empty
+
+SIGNATURE SYSTEM SUMMARY
+========================
+The existing signature system uses toolCallID as the lookup key:
+- Manager.Save(requestID, toolCallID, signature, reasoning, model)
+- Manager.LookupByToolCallID(toolCallID) returns (Entry, bool)
+
+For image generation, we REUSE this system with a different key strategy:
+- Instead of toolCallID, use first 20 characters of base64 image data as the key
+- This creates a stable, reproducible key that works across request/response cycles
+- When model returns image with signature: Save(requestID, base64[:20], signature, reasoning, model)
+- When client sends image back: LookupByToolCallID(base64[:20]) to retrieve signature
+
+The 20 character prefix is chosen because:
+- It is long enough to be practically unique within a conversation
+- It is short enough to be efficient as a map key
+- The first 20 chars of JPEG/PNG base64 data typically include format-specific headers that vary
+
+SYSTEM PROMPT BYPASS SUMMARY
+============================
+The built-in AgentSystemPrompt is defined in internal/vertex/system_prompt.go and is injected via InjectAgentSystemPrompt function.
+
+Injection points to modify (ALL FOUR locations):
+1. internal/gateway/openai/convert.go line 41
+2. internal/gateway/gemini/handler.go line 355 (HandleGenerateContent)
+3. internal/gateway/gemini/handler.go line 430 (HandleStreamGenerateContent)
+4. internal/gateway/claude/convert.go line 56
+
+All four locations must be modified to check for image models and skip injection.
+
+Image models should receive pure client requests without any server-injected prompts because:
+- The AgentSystemPrompt is designed for coding assistant behavior
+- Image generation has different requirements and the prompt may confuse the model
+- Clients may want full control over prompts for image generation
+
+DO NOT
+======
+- Do NOT create new SSE event types for images
+- Do NOT modify the Delta struct to add image-specific fields
+- Do NOT add new import packages other than fmt and regexp if needed
+- Do NOT change the UTF-8 buffering logic in stream.go
+- Do NOT modify the signature Manager, Store, LRU, or Entry types
+- Do NOT create a separate signature storage for images, reuse the existing system
+- Do NOT use full base64 data as the lookup key (too long and inefficient)
+- Do NOT change how toolCallID-based signature lookup works for function calls
+- Do NOT modify the InjectAgentSystemPrompt function or AgentSystemPrompt constant
+- Do NOT use different image model detection logic in different endpoints (must be consistent)

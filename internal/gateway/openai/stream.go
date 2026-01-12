@@ -16,6 +16,7 @@ import (
 type StreamDataPart struct {
 	Text             string
 	FunctionCall     *vertex.FunctionCall
+	InlineData       *vertex.InlineData
 	Thought          bool
 	ThoughtSignature string
 }
@@ -70,6 +71,18 @@ func (sw *StreamWriter) ProcessPart(part StreamDataPart) error {
 	}
 	if part.Text != "" {
 		return sw.writeContentLocked(part.Text)
+	}
+	if part.InlineData != nil {
+		imageKey := part.InlineData.Data
+		if len(imageKey) > 20 {
+			imageKey = imageKey[:20]
+		}
+		if part.ThoughtSignature != "" {
+			signature.GetManager().Save(sw.requestID, imageKey, part.ThoughtSignature, sw.pendingReasoning.String(), sw.model)
+			sw.pendingReasoning.Reset()
+		}
+		imageMarkdown := fmt.Sprintf("![image](data:%s;base64,%s)", part.InlineData.MimeType, part.InlineData.Data)
+		return sw.writeContentLocked(imageMarkdown)
 	}
 	if part.FunctionCall != nil {
 		toolCallID := part.FunctionCall.ID
