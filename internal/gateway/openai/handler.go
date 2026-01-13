@@ -150,7 +150,7 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out := ToChatCompletion(vresp, req.Model, requestID, "")
+	out := ToChatCompletion(vresp, req.Model, requestID)
 	if logger.IsClientLogEnabled() {
 		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
 	}
@@ -167,7 +167,7 @@ func handleStream(w http.ResponseWriter, ctx context.Context, r *http.Request, r
 	}
 
 	SetSSEHeaders(w)
-	writer := NewStreamWriter(w, id.ChatCompletionID(), time.Now().Unix(), req.Model, requestID, "")
+	writer := NewStreamWriter(w, id.ChatCompletionID(), time.Now().Unix(), req.Model, requestID)
 
 	streamResult, _ := vertex.ParseStreamWithResult(resp, func(data *vertex.StreamData) error {
 		if len(data.Response.Candidates) == 0 {

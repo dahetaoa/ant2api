@@ -19,29 +19,18 @@ type Message struct {
 	Content any    `json:"content"`
 }
 
-type SystemBlock struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}
-
 type ContentBlock struct {
-	Type      string      `json:"type"`
-	Text      string      `json:"text,omitempty"`
-	Thinking  string      `json:"thinking,omitempty"`
-	Signature string      `json:"signature,omitempty"`
-	ID        string      `json:"id,omitempty"`
-	Name      string      `json:"name,omitempty"`
-	Input     any         `json:"input,omitempty"`
-	ToolUseID string      `json:"tool_use_id,omitempty"`
-	Content   any         `json:"content,omitempty"`
-	IsError   bool        `json:"is_error,omitempty"`
-	Source    *ImageSource `json:"source,omitempty"`
-}
-
-type ImageSource struct {
 	Type      string `json:"type"`
-	MediaType string `json:"media_type"`
-	Data      string `json:"data"`
+	Text      string `json:"text,omitempty"`
+	Thinking  string `json:"thinking,omitempty"`
+	Signature string `json:"signature,omitempty"`
+	ID        string `json:"id,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Input     any    `json:"input,omitempty"`
+	ToolUseID string `json:"tool_use_id,omitempty"`
+	Content   any    `json:"content,omitempty"`
+	IsError   bool   `json:"is_error,omitempty"`
+	Source    any    `json:"source,omitempty"`
 }
 
 type Tool struct {
@@ -51,9 +40,9 @@ type Tool struct {
 }
 
 type Thinking struct {
-	Type   string `json:"type"`
+	Type string `json:"type"`
 	// Anthropic clients typically send budget_tokens. Accept both.
-	Budget       int `json:"budget,omitempty"`
-	BudgetTokens int `json:"budget_tokens,omitempty"`
-	Level  string `json:"thinking_level,omitempty"`
+	Budget       int    `json:"budget,omitempty"`
+	BudgetTokens int    `json:"budget_tokens,omitempty"`
+	Level        string `json:"thinking_level,omitempty"`
 }

@@ -304,20 +304,6 @@ func SetStreamHeaders(w http.ResponseWriter) {
 	w.Header().Set("X-Accel-Buffering", "no")
 }
 
-func WriteStreamData(w http.ResponseWriter, data any) error {
-	jsonBytes, err := jsonpkg.Marshal(data)
-	if err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "data: %s\n\n", jsonBytes); err != nil {
-		return err
-	}
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
-	}
-	return nil
-}
-
 func WriteStreamDone(w http.ResponseWriter) {
 	_, _ = w.Write([]byte("data: [DONE]\n\n"))
 	if f, ok := w.(http.Flusher); ok {
@@ -332,6 +318,14 @@ func WriteStreamError(w http.ResponseWriter, errMsg string) {
 			"type":    "server_error",
 		},
 	}
-	_ = WriteStreamData(w, errResp)
+	jsonBytes, err := jsonpkg.Marshal(errResp)
+	if err == nil {
+		_, err = fmt.Fprintf(w, "data: %s\n\n", jsonBytes)
+	}
+	if err == nil {
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}
 	WriteStreamDone(w)
 }

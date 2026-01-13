@@ -6,7 +6,7 @@ import (
 )
 
 // Parse parses a tiny subset of TOML needed by this project.
-func Parse(input string) (map[string]any, error) {
+func Parse(input string) map[string]any {
 	result := make(map[string]any)
 	var currentArrayName string
 	var currentObj map[string]any
@@ -18,7 +18,7 @@ func Parse(input string) (map[string]any, error) {
 			continue
 		}
 
-		if strings.HasPrefix(line, "[[") && strings.HasSuffix(line, "]]" ) {
+		if strings.HasPrefix(line, "[[") && strings.HasSuffix(line, "]]") {
 			section := strings.TrimSpace(line[2 : len(line)-2])
 			if currentObj != nil && currentArrayName != "" {
 				arr, _ := result[currentArrayName].([]map[string]any)
@@ -58,7 +58,7 @@ func Parse(input string) (map[string]any, error) {
 		result[currentArrayName] = arr
 	}
 
-	return result, nil
+	return result
 }
 
 func stripInlineComment(line string) string {
@@ -118,4 +118,3 @@ func parseArray(content string) []any {
 	}
 	return result
 }
-

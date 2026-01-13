@@ -42,8 +42,7 @@ func SetSSEHeaders(w http.ResponseWriter) {
 	w.Header().Set("X-Accel-Buffering", "no")
 }
 
-func NewSSEEmitter(w http.ResponseWriter, requestID string, model string, inputTokens int, sessionID string) *SSEEmitter {
-	_ = sessionID
+func NewSSEEmitter(w http.ResponseWriter, requestID string, model string, inputTokens int) *SSEEmitter {
 	return &SSEEmitter{
 		w:                       w,
 		requestID:               requestID,

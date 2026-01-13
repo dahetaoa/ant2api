@@ -15,11 +15,7 @@ type Config struct {
 	TimeoutMs int
 	Proxy     string
 
-	APIKey        string
-	PanelUser     string
-	PanelPassword string
-
-	MaxRequestSize string
+	APIKey string
 
 	RetryStatusCodes []int
 	RetryMaxAttempts int
@@ -55,9 +51,6 @@ func Load() *Config {
 			TimeoutMs:          getEnvInt("TIMEOUT", 180000),
 			Proxy:              getEnv("PROXY", ""),
 			APIKey:             getEnv("API_KEY", ""),
-			PanelUser:          getEnv("PANEL_USER", "admin"),
-			PanelPassword:      getEnv("PANEL_PASSWORD", ""),
-			MaxRequestSize:     getEnv("MAX_REQUEST_SIZE", "50mb"),
 			RetryStatusCodes:   getEnvIntSlice("RETRY_STATUS_CODES", []int{429, 500}),
 			RetryMaxAttempts:   getEnvInt("RETRY_MAX_ATTEMPTS", 3),
 			Debug:              getEnv("DEBUG", "off"),

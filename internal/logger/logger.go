@@ -60,10 +60,6 @@ func IsBackendLogEnabled() bool {
 	return currentLogLevel >= LogHigh
 }
 
-func IsAnyLogEnabled() bool {
-	return currentLogLevel > LogOff
-}
-
 func Info(format string, args ...any) {
 	timestamp := time.Now().Format("15:04:05")
 	msg := fmt.Sprintf(format, args...)

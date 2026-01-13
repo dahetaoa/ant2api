@@ -2,7 +2,6 @@ package id
 
 import (
 	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"math/big"
 	"strings"
@@ -34,12 +33,6 @@ func ToolCallID() string {
 	return "call_" + strings.ReplaceAll(id, "-", "")
 }
 
-func SecureToken(length int) string {
-	bytes := make([]byte, length)
-	_, _ = rand.Read(bytes)
-	return hex.EncodeToString(bytes)
-}
-
 func ChatCompletionID() string { return fmt.Sprintf("chatcmpl-%s", uuid.New().String()[:8]) }
 
 func randIndex(list []string) string {
@@ -56,4 +49,3 @@ func randomAlphanumeric(length int) string {
 	}
 	return string(result)
 }
-

@@ -131,28 +131,6 @@ func (s *Store) GetTokenByProjectID(projectID string) (*Account, error) {
 	return nil, errors.New("未找到指定的账号")
 }
 
-func (s *Store) GetTokenByEmail(email string) (*Account, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	nowMs := time.Now().UnixMilli()
-	for i := range s.accounts {
-		account := &s.accounts[i]
-		if account.Email == email && account.Enable {
-			if account.IsExpired(nowMs) {
-				if err := RefreshToken(account); err != nil {
-					return nil, err
-				}
-				_ = s.saveUnlocked()
-			}
-			copyAccount := *account
-			return &copyAccount, nil
-		}
-	}
-
-	return nil, errors.New("未找到指定的账号")
-}
-
 func (s *Store) GetAll() []Account {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -266,52 +244,4 @@ func (s *Store) RefreshAll() (int, int) {
 	}
 	_ = s.saveUnlocked()
 	return success, failed
-}
-
-func (s *Store) ImportFromTOML(tomlData map[string]any) (int, error) {
-	accounts, ok := tomlData["accounts"].([]map[string]any)
-	if !ok {
-		return 0, errors.New("无效的 TOML 格式")
-	}
-
-	imported := 0
-	for _, acc := range accounts {
-		account := Account{Enable: true}
-
-		if v, ok := acc["access_token"].(string); ok {
-			account.AccessToken = v
-		}
-		if v, ok := acc["refresh_token"].(string); ok {
-			account.RefreshToken = v
-		}
-		switch v := acc["expires_in"].(type) {
-		case int64:
-			account.ExpiresIn = int(v)
-		case float64:
-			account.ExpiresIn = int(v)
-		}
-		switch v := acc["timestamp"].(type) {
-		case int64:
-			account.Timestamp = v
-		case float64:
-			account.Timestamp = int64(v)
-		}
-		if v, ok := acc["projectId"].(string); ok {
-			account.ProjectID = v
-		}
-		if v, ok := acc["email"].(string); ok {
-			account.Email = v
-		}
-		if v, ok := acc["enable"].(bool); ok {
-			account.Enable = v
-		}
-
-		if account.RefreshToken != "" {
-			if err := s.Add(account); err == nil {
-				imported++
-			}
-		}
-	}
-
-	return imported, nil
 }

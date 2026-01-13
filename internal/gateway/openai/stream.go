@@ -38,9 +38,8 @@ type StreamWriter struct {
 	mu               sync.Mutex
 }
 
-func NewStreamWriter(w http.ResponseWriter, id string, created int64, model string, requestID string, sessionID string) *StreamWriter {
+func NewStreamWriter(w http.ResponseWriter, id string, created int64, model string, requestID string) *StreamWriter {
 	SetSSEHeaders(w)
-	_ = sessionID
 	return &StreamWriter{w: w, id: id, created: created, model: model, requestID: requestID}
 }
 

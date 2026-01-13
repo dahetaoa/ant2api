@@ -381,32 +381,3 @@ func FetchAvailableModels(ctx context.Context, project, accessToken string) (*Av
 	logger.BackendResponse(resp.StatusCode, time.Since(startTime), &out)
 	return &out, nil
 }
-
-func IsRetryableError(err error) bool {
-	apiErr, ok := err.(*APIError)
-	if !ok {
-		return false
-	}
-
-	for _, code := range config.Get().RetryStatusCodes {
-		if apiErr.Status == code {
-			return true
-		}
-	}
-	return false
-}
-
-func ShouldDisableToken(err error) bool {
-	apiErr, ok := err.(*APIError)
-	if !ok {
-		return false
-	}
-	return apiErr.DisableToken
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

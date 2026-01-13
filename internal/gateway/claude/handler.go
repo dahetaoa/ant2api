@@ -195,7 +195,7 @@ func handleStream(w http.ResponseWriter, r *http.Request, req *MessagesRequest, 
 	}
 
 	SetSSEHeaders(w)
-	emitter := NewSSEEmitter(w, requestID, req.Model, inputTokens, "")
+	emitter := NewSSEEmitter(w, requestID, req.Model, inputTokens)
 	_ = emitter.Start()
 
 	streamResult, _ := vertex.ParseStreamWithResult(resp, func(data *vertex.StreamData) error {

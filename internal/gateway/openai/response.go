@@ -61,7 +61,7 @@ func ConvertUsage(metadata *vertex.UsageMetadata) *Usage {
 	}
 }
 
-func ToChatCompletion(resp *vertex.Response, model string, requestID string, sessionID string) *ChatCompletion {
+func ToChatCompletion(resp *vertex.Response, model string, requestID string) *ChatCompletion {
 	out := &ChatCompletion{
 		ID:      id.ChatCompletionID(),
 		Object:  "chat.completion",
