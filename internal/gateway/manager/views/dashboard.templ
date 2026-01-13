@@ -1,0 +1,179 @@
+package views
+
+import (
+    "fmt"
+    "time"
+    "anti2api-golang/refactor/internal/credential"
+)
+
+templ Dashboard(accounts []credential.Account, stats map[string]int) {
+	@Layout("Antigravity 2 API 管理面板") {
+		<div class="fixed top-0 left-0 right-0 z-50 bg-white shadow py-3 px-6">
+			<div class="max-w-7xl mx-auto flex items-center justify-center">
+                <div class="font-bold text-xl tracking-tight text-slate-900">Antigravity 2 API 管理面板</div>
+			</div>
+		</div>
+
+		<div class="max-w-7xl mx-auto px-6 space-y-8 mt-4">
+			<!-- Overview Section -->
+			<div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+				<div class="flex justify-between items-center mb-6">
+					<h2 class="text-lg font-bold text-slate-800">概览</h2>
+					<div class="flex gap-3">
+						<button class="px-4 py-2 text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2"
+						    hx-post="/manager/api/refresh_all" 
+                            hx-swap="none"
+                            hx-indicator="#refresh-indicator">
+                            <span id="refresh-indicator" class="htmx-indicator animate-spin">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                            </span>
+							<span class="htmx-request:hidden">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+                            </span>
+							刷新全部
+						</button>
+					</div>
+				</div>
+				
+				<div class="grid grid-cols-1 md:grid-cols-3 gap-4" hx-get="/manager/api/stats" hx-trigger="every 10s" hx-swap="innerHTML">
+				    @StatsCards(stats)
+				</div>
+			</div>
+
+			<!-- Token Management -->
+			<div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+                 <h3 class="text-lg font-bold text-slate-800 mb-4">添加 Token</h3>
+                 <form hx-post="/manager/api/add" hx-target="#tokenGrid" hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful) this.reset()">
+                    <div class="flex gap-4">
+                        <input type="text" name="token" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50 transition-all text-sm" placeholder="输入 SSO Token (ey...) 或 Json 配置"/>
+                        <button type="submit" class="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200">添加</button>
+                    </div>
+                    <div class="mt-2 text-xs text-slate-400">支持直接粘贴 sso=... 格式或 JSON 格式的单个/多个账号配置</div>
+                 </form>
+            </div>
+
+			<!-- Token Grid -->
+            <div>
+                <h3 class="text-lg font-bold text-slate-800 mb-4">账号列表</h3>
+			    <div id="tokenGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+				    @TokenList(accounts)
+			    </div>
+            </div>
+		</div>
+	}
+}
+
+templ StatsCards(stats map[string]int) {
+    @StatsCard("Token 总数", stats["total"], "text-blue-600", "bg-blue-50/50 border-blue-100")
+    @StatsCard("活跃 Token", stats["active"], "text-emerald-600", "bg-emerald-50/50 border-emerald-100")
+    @StatsCard("失效/禁用 Token", stats["expired"], "text-red-600", "bg-red-50/50 border-red-100")
+}
+
+templ StatsCard(label string, value int, textColor string, containerClass string) {
+    <div class={ "p-5 rounded-xl border flex items-center gap-5 transition-all " + containerClass }>
+        <div class={ "p-3 rounded-lg bg-white " + textColor }>
+             if label == "Token 总数" {
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+             } else if label == "活跃 Token" {
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+             } else {
+                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+             }
+        </div>
+        <div class="flex flex-col">
+            <span class="text-sm font-medium text-slate-500 uppercase tracking-wider">{ label }</span>
+            <span class={ "text-3xl font-bold tracking-tight " + textColor }>{ fmt.Sprintf("%d", value) }</span>
+        </div>
+    </div>
+}
+
+templ TokenList(accounts []credential.Account) {
+    for _, account := range accounts {
+        @TokenCard(account)
+    }
+    if len(accounts) == 0 {
+        <div class="col-span-full py-10 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+            暂无数据
+        </div>
+    }
+}
+
+templ TokenCard(account credential.Account) {
+    <div class="bg-white border boundary-slate-200 rounded-xl shadow-sm p-5 hover:shadow-md transition-all duration-200 group relative overflow-hidden">
+        if !account.Enable {
+             <div class="absolute inset-0 bg-slate-50/50 z-10 pointer-events-none"></div>
+             <div class="absolute top-3 right-3 z-20">
+                 <span class="px-2 py-1 rounded text-xs font-medium bg-slate-200 text-slate-600">已禁用</span>
+             </div>
+        } else if account.IsExpired(time.Now().UnixMilli()) {
+              <div class="absolute top-3 right-3 z-20">
+                 <span class="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-600">已失效</span>
+             </div>
+        } else {
+             <div class="absolute top-3 right-3 z-20">
+                 <span class="px-2 py-1 rounded text-xs font-medium bg-emerald-100 text-emerald-600">活跃</span>
+             </div>
+        }
+
+        <div class="flex justify-between items-start mb-4 pr-16 relative z-10 w-full">
+             <div class="overflow-hidden w-full">
+                <div class="font-bold text-slate-800 truncate text-base mb-1" title={ account.Email }>
+                    if account.Email != "" {
+                        { account.Email }
+                    } else if account.ProjectID != "" {
+                        { account.ProjectID }
+                    } else {
+                        未命名账号
+                    }
+                </div>
+                <div class="text-xs text-slate-400 font-mono flex items-center gap-1 cursor-pointer hover:text-blue-500 transition-colors" 
+                     onclick={ templ.ComponentScript{
+                        Call: fmt.Sprintf("navigator.clipboard.writeText('%s').then(()=>alert('Token 已复制'))", account.AccessToken),
+                     } }
+                     title="点击复制 Access Token">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                     { account.AccessToken[:12] }...{ account.AccessToken[len(account.AccessToken)-6:] }
+                </div>
+             </div>
+        </div>
+        
+        <div class="space-y-3 relative z-10">
+             <div class="flex justify-between items-center text-sm border-t border-slate-50 pt-3">
+                <span class="text-slate-500 text-xs">过期时间</span>
+                <span class="text-slate-700 font-medium text-xs">
+                     if account.Timestamp > 0 && account.ExpiresIn > 0 {
+                          { time.Unix(account.Timestamp + int64(account.ExpiresIn), 0).Format("2006-01-02 15:04:05") }
+                     } else {
+                          -
+                     }
+                </span>
+             </div>
+
+             <div class="flex gap-2 mt-4">
+                <button class="flex-1 py-1.5 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded transition-colors"
+                        hx-post={ fmt.Sprintf("/manager/api/refresh?id=%s", account.SessionID) }
+                        hx-target="closest .group"
+                        hx-swap="outerHTML">
+                    刷新
+                </button>
+                <button class="flex-1 py-1.5 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded transition-colors"
+                        hx-post={ fmt.Sprintf("/manager/api/toggle?id=%s", account.SessionID) }
+                        hx-target="closest .group"
+                        hx-swap="outerHTML">
+                    if account.Enable {
+                        禁用
+                    } else {
+                        启用
+                    }
+                </button>
+                <button class="flex-none px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 rounded transition-colors"
+                        hx-post={ fmt.Sprintf("/manager/api/delete?id=%s", account.SessionID) }
+                        hx-confirm="确认删除此账号?"
+                        hx-target="closest .group"
+                        hx-swap="outerHTML">
+                    删除
+                </button>
+             </div>
+        </div>
+    </div>
+}

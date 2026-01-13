@@ -15,11 +15,17 @@ func Auth(next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Keep health endpoint accessible for liveness checks.
+// Keep health endpoint accessible for liveness checks.
 		if r.URL.Path == "/health" {
 			next.ServeHTTP(w, r)
 			return
 		}
+        
+        // Allow Manager UI and Login (handled by separate auth)
+        if r.URL.Path == "/" || strings.HasPrefix(r.URL.Path, "/login") || strings.HasPrefix(r.URL.Path, "/manager") {
+            next.ServeHTTP(w, r)
+            return
+        }
 
 		key := ""
 		if v := r.Header.Get("x-api-key"); v != "" {

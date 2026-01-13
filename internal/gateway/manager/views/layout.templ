@@ -1,0 +1,52 @@
+package views
+
+templ Layout(title string) {
+	<!DOCTYPE html>
+	<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+		<title>{ title }</title>
+		<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+		<script src="https://cdn.tailwindcss.com"></script>
+		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+		<style>
+			body { font-family: 'Inter', sans-serif; }
+            .htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }
+            .htmx-request .htmx-indicator { opacity: 1 }
+            .htmx-request.htmx-indicator { opacity: 1 }
+		</style>
+	</head>
+	<body class="bg-slate-50 text-slate-900 min-h-screen pt-20 pb-10">
+		{ children... }
+        <div id="toast-container" class="fixed top-20 right-5 z-50 flex flex-col gap-2"></div>
+         <script>
+            document.body.addEventListener("showMessage", function(evt){
+                const msg = evt.detail.message;
+                const type = evt.detail.type || 'info';
+                const toast = document.createElement('div');
+                
+                let bgClass = 'bg-blue-600';
+                if(type === 'error') bgClass = 'bg-red-600';
+                if(type === 'success') bgClass = 'bg-emerald-600';
+
+                toast.className = `p-4 rounded-lg shadow-lg text-white transform transition-all duration-300 translate-x-full opacity-0 ${bgClass}`;
+                toast.textContent = msg;
+                
+                document.getElementById('toast-container').appendChild(toast);
+                
+                // Animation in
+                requestAnimationFrame(() => {
+                    toast.classList.remove('translate-x-full', 'opacity-0');
+                });
+
+                // Remove after 3s
+                setTimeout(() => {
+                    toast.classList.add('translate-x-full', 'opacity-0');
+                    setTimeout(() => toast.remove(), 300);
+                }, 3000);
+            })
+        </script>
+	</body>
+	</html>
+}

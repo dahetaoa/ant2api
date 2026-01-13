@@ -1,8 +1,11 @@
 module anti2api-golang/refactor
 
-go 1.21
+go 1.23.0
+
+toolchain go1.23.4
 
 require (
+	github.com/a-h/templ v0.3.977
 	github.com/bytedance/sonic v1.12.0
 	github.com/google/uuid v1.6.0
 )

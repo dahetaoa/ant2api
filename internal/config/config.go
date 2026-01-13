@@ -28,6 +28,7 @@ type Config struct {
 	GoogleClientSecret string
 
 	DataDir string
+    AdminPassword string
 }
 
 var (
@@ -58,6 +59,7 @@ func Load() *Config {
 			GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
 			GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 			DataDir:            getEnv("DATA_DIR", "./data"),
+            AdminPassword:      getEnv("ADMIN_PASSWORD", "123456"),
 		}
 
 		for i, arg := range os.Args[1:] {

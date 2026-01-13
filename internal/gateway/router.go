@@ -8,6 +8,7 @@ import (
 
 	"anti2api-golang/refactor/internal/gateway/claude"
 	"anti2api-golang/refactor/internal/gateway/gemini"
+	"anti2api-golang/refactor/internal/gateway/manager"
 	"anti2api-golang/refactor/internal/gateway/openai"
 	"anti2api-golang/refactor/internal/middleware"
 )
@@ -30,6 +31,38 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("/v1beta/models/", gemini.HandleModels)
 	// Provide a stable non-redirect entrypoint for list.
 	mux.HandleFunc("/v1beta/models", allowMethods(gemini.HandleListModels, http.MethodGet, http.MethodHead))
+
+	// Manager UI & API
+	// Public Login
+	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+        if r.Method == http.MethodPost {
+            manager.HandleLogin(w, r)
+        } else {
+            manager.HandleLoginView(w, r)
+        }
+    })
+    mux.HandleFunc("/logout", manager.HandleLogout)
+
+    // Protected Manager Routes
+    // We use a separate mux for manager routes to wrap them in ManagerAuth
+    // However, since we want to mount it at root "/", we must be careful not to shadow /v1 routes
+    // But ServeMux uses longest match, so /v1 will still take precedence over /
+    
+    // We can't mount a handler at "/" AND have other handlers at /v1 on the *same* mux easily if we modify the handler for "/"
+    // Wait, mux.Handle("/", ...) works as catch-all.
+    
+    managerMux := http.NewServeMux()
+    managerMux.HandleFunc("/", manager.HandleDashboard)
+	managerMux.HandleFunc("/manager/api/list", manager.HandleList)
+	managerMux.HandleFunc("/manager/api/stats", manager.HandleStats)
+	managerMux.HandleFunc("/manager/api/add", manager.HandleAdd)
+	managerMux.HandleFunc("/manager/api/delete", manager.HandleDelete)
+	managerMux.HandleFunc("/manager/api/toggle", manager.HandleToggle)
+	managerMux.HandleFunc("/manager/api/refresh", manager.HandleRefresh)
+	managerMux.HandleFunc("/manager/api/refresh_all", manager.HandleRefreshAll)
+    
+    // Mount the protected manager logic at root
+    mux.Handle("/", manager.ManagerAuth(managerMux))
 
 	h := middleware.Recovery(mux)
 	h = middleware.Logging(h)
