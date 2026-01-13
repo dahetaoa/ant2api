@@ -104,5 +104,3 @@ func (c *LRU) GetByToolCallID(toolCallID string) (EntryIndex, bool) {
 	c.ll.MoveToFront(el)
 	return it.index, true
 }
-
-// Session-based lookup removed; signatures are indexed by tool_call_id only.

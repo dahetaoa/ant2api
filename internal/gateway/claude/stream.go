@@ -9,6 +9,7 @@ import (
 	"anti2api-golang/refactor/internal/logger"
 	"anti2api-golang/refactor/internal/pkg/id"
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
+	"anti2api-golang/refactor/internal/pkg/modelutil"
 	"anti2api-golang/refactor/internal/signature"
 	"anti2api-golang/refactor/internal/vertex"
 )
@@ -35,20 +36,13 @@ type SSEEmitter struct {
 	mu                       sync.Mutex
 }
 
-func SetSSEHeaders(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-}
-
 func NewSSEEmitter(w http.ResponseWriter, requestID string, model string, inputTokens int) *SSEEmitter {
 	return &SSEEmitter{
 		w:                       w,
 		requestID:               requestID,
 		model:                   model,
 		inputTokens:             inputTokens,
-		enableThinkingSignature: strings.HasPrefix(strings.TrimSpace(model), "claude-"),
+		enableThinkingSignature: modelutil.IsClaude(model),
 	}
 }
 

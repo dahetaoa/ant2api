@@ -3,14 +3,16 @@ package claude
 import (
 	"io"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
 	"anti2api-golang/refactor/internal/credential"
+	gwcommon "anti2api-golang/refactor/internal/gateway/common"
 	"anti2api-golang/refactor/internal/logger"
+	httppkg "anti2api-golang/refactor/internal/pkg/http"
 	"anti2api-golang/refactor/internal/pkg/id"
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
+	"anti2api-golang/refactor/internal/pkg/modelutil"
 	"anti2api-golang/refactor/internal/vertex"
 )
 
@@ -27,7 +29,7 @@ type ModelItem struct {
 func HandleMessages(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeClaudeError(w, http.StatusBadRequest, "读取请求体失败，请检查请求是否正确发送。")
+		httppkg.WriteClaudeError(w, http.StatusBadRequest, "读取请求体失败，请检查请求是否正确发送。")
 		return
 	}
 
@@ -37,26 +39,25 @@ func HandleMessages(w http.ResponseWriter, r *http.Request) {
 
 	var req MessagesRequest
 	if err := jsonpkg.Unmarshal(body, &req); err != nil {
-		writeClaudeError(w, http.StatusBadRequest, "请求 JSON 解析失败，请检查请求体格式。")
+		httppkg.WriteClaudeError(w, http.StatusBadRequest, "请求 JSON 解析失败，请检查请求体格式。")
 		return
 	}
 
 	acc, err := credential.GetStore().GetToken()
 	if err != nil {
-		writeClaudeError(w, http.StatusServiceUnavailable, err.Error())
+		httppkg.WriteClaudeError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
 	if acc.ProjectID == "" {
 		acc.ProjectID = id.ProjectID()
 	}
 
-	acct := &AccountContext{ProjectID: acc.ProjectID, SessionID: acc.SessionID, AccessToken: acc.AccessToken}
+	acct := &gwcommon.AccountContext{ProjectID: acc.ProjectID, SessionID: acc.SessionID, AccessToken: acc.AccessToken}
 	vreq, requestID, err := ToVertexRequest(&req, acct)
 	if err != nil {
-		writeClaudeError(w, http.StatusBadRequest, err.Error())
+		httppkg.WriteClaudeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	_ = requestID
 
 	inputTokens := estimateTokens(body)
 	if req.Stream {
@@ -68,9 +69,9 @@ func HandleMessages(w http.ResponseWriter, r *http.Request) {
 	vresp, err := vertex.GenerateContent(r.Context(), vreq, acc.AccessToken)
 	if err != nil {
 		if logger.IsClientLogEnabled() {
-			logger.ClientResponse(statusFromVertexErr(err), time.Since(startTime), err.Error())
+			logger.ClientResponse(gwcommon.StatusFromVertexError(err), time.Since(startTime), err.Error())
 		}
-		writeClaudeError(w, statusFromVertexErr(err), err.Error())
+		httppkg.WriteClaudeError(w, gwcommon.StatusFromVertexError(err), err.Error())
 		return
 	}
 
@@ -78,7 +79,7 @@ func HandleMessages(w http.ResponseWriter, r *http.Request) {
 	if logger.IsClientLogEnabled() {
 		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
 	}
-	writeJSON(w, http.StatusOK, out)
+	httppkg.WriteJSON(w, http.StatusOK, out)
 }
 
 func HandleListModels(w http.ResponseWriter, r *http.Request) {
@@ -91,7 +92,7 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 		if logger.IsClientLogEnabled() {
 			logger.ClientResponse(http.StatusServiceUnavailable, time.Since(startTime), err.Error())
 		}
-		writeClaudeError(w, http.StatusServiceUnavailable, err.Error())
+		httppkg.WriteClaudeError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
 	if acc.ProjectID == "" {
@@ -101,52 +102,13 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 	vm, err := vertex.FetchAvailableModels(r.Context(), acc.ProjectID, acc.AccessToken)
 	if err != nil {
 		if logger.IsClientLogEnabled() {
-			logger.ClientResponse(statusFromVertexErr(err), time.Since(startTime), err.Error())
+			logger.ClientResponse(gwcommon.StatusFromVertexError(err), time.Since(startTime), err.Error())
 		}
-		writeClaudeError(w, statusFromVertexErr(err), err.Error())
+		httppkg.WriteClaudeError(w, gwcommon.StatusFromVertexError(err), err.Error())
 		return
 	}
 
-	ids := make([]string, 0, len(vm.Models)+2)
-	seen := make(map[string]struct{}, len(vm.Models)+2)
-	hasGemini3Flash := false
-	hasClaudeOpus45 := false
-	hasClaudeOpus45Thinking := false
-	for k := range vm.Models {
-		idv := strings.TrimSpace(k)
-		if idv == "" {
-			continue
-		}
-		if strings.EqualFold(idv, "gemini-3-flash") {
-			hasGemini3Flash = true
-		}
-		lower := strings.ToLower(idv)
-		if strings.HasPrefix(lower, "claude-opus-4-5-thinking") {
-			hasClaudeOpus45Thinking = true
-		} else if strings.HasPrefix(lower, "claude-opus-4-5") {
-			hasClaudeOpus45 = true
-		}
-		if _, ok := seen[idv]; ok {
-			continue
-		}
-		seen[idv] = struct{}{}
-		ids = append(ids, idv)
-	}
-	// Virtual model injection: only add gemini-3-flash-thinking when gemini-3-flash exists.
-	if hasGemini3Flash {
-		const virtual = "gemini-3-flash-thinking"
-		if _, ok := seen[virtual]; !ok {
-			ids = append(ids, virtual)
-		}
-	}
-	// Virtual model injection: add claude-opus-4-5 when only claude-opus-4-5-thinking* exists.
-	if hasClaudeOpus45Thinking && !hasClaudeOpus45 {
-		const virtual = "claude-opus-4-5"
-		if _, ok := seen[virtual]; !ok {
-			ids = append(ids, virtual)
-		}
-	}
-	sort.Strings(ids)
+	ids := modelutil.BuildSortedModelIDs(vm.Models)
 
 	items := make([]ModelItem, 0, len(ids))
 	for _, mid := range ids {
@@ -157,13 +119,13 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 	if logger.IsClientLogEnabled() {
 		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
 	}
-	writeJSON(w, http.StatusOK, out)
+	httppkg.WriteJSON(w, http.StatusOK, out)
 }
 
 func HandleCountTokens(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeClaudeError(w, http.StatusBadRequest, "读取请求体失败，请检查请求是否正确发送。")
+		httppkg.WriteClaudeError(w, http.StatusBadRequest, "读取请求体失败，请检查请求是否正确发送。")
 		return
 	}
 
@@ -173,7 +135,7 @@ func HandleCountTokens(w http.ResponseWriter, r *http.Request) {
 	// Use same request schema.
 	var req MessagesRequest
 	if err := jsonpkg.Unmarshal(body, &req); err != nil {
-		writeClaudeError(w, http.StatusBadRequest, "请求 JSON 解析失败，请检查请求体格式。")
+		httppkg.WriteClaudeError(w, http.StatusBadRequest, "请求 JSON 解析失败，请检查请求体格式。")
 		return
 	}
 	startTime := time.Now()
@@ -182,19 +144,19 @@ func HandleCountTokens(w http.ResponseWriter, r *http.Request) {
 	if logger.IsClientLogEnabled() {
 		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
 	}
-	writeJSON(w, http.StatusOK, out)
+	httppkg.WriteJSON(w, http.StatusOK, out)
 }
 
-func handleStream(w http.ResponseWriter, r *http.Request, req *MessagesRequest, vreq *vertex.Request, requestID string, inputTokens int, acct *AccountContext) {
+func handleStream(w http.ResponseWriter, r *http.Request, req *MessagesRequest, vreq *vertex.Request, requestID string, inputTokens int, acct *gwcommon.AccountContext) {
 	startTime := time.Now()
 	resp, err := vertex.GenerateContentStream(r.Context(), vreq, acct.AccessToken)
 	if err != nil {
-		SetSSEHeaders(w)
+		httppkg.SetSSEHeaders(w)
 		_ = writeSSEError(w, err.Error())
 		return
 	}
 
-	SetSSEHeaders(w)
+	httppkg.SetSSEHeaders(w)
 	emitter := NewSSEEmitter(w, requestID, req.Model, inputTokens)
 	_ = emitter.Start()
 
@@ -249,31 +211,6 @@ func estimateTokens(body []byte) int {
 		return 1
 	}
 	return c
-}
-
-func statusFromVertexErr(err error) int {
-	if apiErr, ok := err.(*vertex.APIError); ok {
-		return apiErr.Status
-	}
-	return http.StatusInternalServerError
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	b, err := jsonpkg.Marshal(v)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_, _ = w.Write(b)
-}
-
-func writeClaudeError(w http.ResponseWriter, status int, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	encoded, _ := jsonpkg.MarshalString(msg)
-	_, _ = w.Write([]byte(`{"type":"error","error":{"type":"api_error","message":` + encoded + `}}`))
 }
 
 func writeSSEError(w http.ResponseWriter, msg string) error {

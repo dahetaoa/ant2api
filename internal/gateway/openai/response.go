@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"anti2api-golang/refactor/internal/pkg/id"
+	"anti2api-golang/refactor/internal/pkg/modelutil"
 	"anti2api-golang/refactor/internal/signature"
 	"anti2api-golang/refactor/internal/vertex"
 )
@@ -81,7 +82,7 @@ func ToChatCompletion(resp *vertex.Response, model string, requestID string) *Ch
 	var toolCalls []ToolCall
 
 	sigMgr := signature.GetManager()
-	isClaudeThinking := strings.HasPrefix(strings.TrimSpace(model), "claude-") && strings.HasSuffix(strings.TrimSpace(model), "-thinking")
+	isClaudeThinking := modelutil.IsClaudeThinking(model)
 	pendingSig := ""
 	var pendingReasoning strings.Builder
 

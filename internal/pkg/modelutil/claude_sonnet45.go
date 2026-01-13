@@ -23,7 +23,7 @@ func ClaudeSonnet45ThinkingBudget(model string) (budget int, ok bool) {
 
 	// Check "-thinking" first to avoid false matches.
 	if strings.HasPrefix(m, thinking) {
-		return 32000, true
+		return DefaultClaudeThinkingBudgetTokens, true
 	}
 	if strings.HasPrefix(m, base) {
 		return 0, true

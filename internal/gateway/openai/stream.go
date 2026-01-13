@@ -8,8 +8,10 @@ import (
 	"unicode/utf8"
 
 	"anti2api-golang/refactor/internal/logger"
+	httppkg "anti2api-golang/refactor/internal/pkg/http"
 	"anti2api-golang/refactor/internal/pkg/id"
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
+	"anti2api-golang/refactor/internal/pkg/modelutil"
 	"anti2api-golang/refactor/internal/signature"
 	"anti2api-golang/refactor/internal/vertex"
 )
@@ -39,15 +41,8 @@ type StreamWriter struct {
 }
 
 func NewStreamWriter(w http.ResponseWriter, id string, created int64, model string, requestID string) *StreamWriter {
-	SetSSEHeaders(w)
+	httppkg.SetSSEHeaders(w)
 	return &StreamWriter{w: w, id: id, created: created, model: model, requestID: requestID}
-}
-
-func SetSSEHeaders(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
 }
 
 func WriteSSEError(w http.ResponseWriter, msg string) {
@@ -59,7 +54,7 @@ func (sw *StreamWriter) ProcessPart(part StreamDataPart) error {
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
 
-	isClaudeThinking := strings.HasPrefix(strings.TrimSpace(sw.model), "claude-") && strings.HasSuffix(strings.TrimSpace(sw.model), "-thinking")
+	isClaudeThinking := modelutil.IsClaudeThinking(sw.model)
 	if isClaudeThinking && part.Thought && part.ThoughtSignature != "" {
 		// Claude thinking: bind the signature to the first tool call that follows this signature block.
 		sw.pendingSig = part.ThoughtSignature

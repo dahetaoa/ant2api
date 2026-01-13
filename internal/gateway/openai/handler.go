@@ -4,14 +4,16 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
 	"anti2api-golang/refactor/internal/credential"
+	gwcommon "anti2api-golang/refactor/internal/gateway/common"
 	"anti2api-golang/refactor/internal/logger"
+	httppkg "anti2api-golang/refactor/internal/pkg/http"
 	"anti2api-golang/refactor/internal/pkg/id"
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
+	"anti2api-golang/refactor/internal/pkg/modelutil"
 	"anti2api-golang/refactor/internal/vertex"
 )
 
@@ -25,7 +27,7 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 		if logger.IsClientLogEnabled() {
 			logger.ClientResponse(http.StatusServiceUnavailable, time.Since(startTime), err.Error())
 		}
-		writeOpenAIError(w, http.StatusServiceUnavailable, err.Error())
+		httppkg.WriteOpenAIError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
 	if acc.ProjectID == "" {
@@ -35,52 +37,13 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 	vm, err := vertex.FetchAvailableModels(r.Context(), acc.ProjectID, acc.AccessToken)
 	if err != nil {
 		if logger.IsClientLogEnabled() {
-			logger.ClientResponse(statusFromVertexErr(err), time.Since(startTime), err.Error())
+			logger.ClientResponse(gwcommon.StatusFromVertexError(err), time.Since(startTime), err.Error())
 		}
-		writeOpenAIError(w, statusFromVertexErr(err), err.Error())
+		httppkg.WriteOpenAIError(w, gwcommon.StatusFromVertexError(err), err.Error())
 		return
 	}
 
-	ids := make([]string, 0, len(vm.Models)+2)
-	seen := make(map[string]struct{}, len(vm.Models)+2)
-	hasGemini3Flash := false
-	hasClaudeOpus45 := false
-	hasClaudeOpus45Thinking := false
-	for k := range vm.Models {
-		idv := strings.TrimSpace(k)
-		if idv == "" {
-			continue
-		}
-		if strings.EqualFold(idv, "gemini-3-flash") {
-			hasGemini3Flash = true
-		}
-		lower := strings.ToLower(idv)
-		if strings.HasPrefix(lower, "claude-opus-4-5-thinking") {
-			hasClaudeOpus45Thinking = true
-		} else if strings.HasPrefix(lower, "claude-opus-4-5") {
-			hasClaudeOpus45 = true
-		}
-		if _, ok := seen[idv]; ok {
-			continue
-		}
-		seen[idv] = struct{}{}
-		ids = append(ids, idv)
-	}
-	// Virtual model injection: only add gemini-3-flash-thinking when gemini-3-flash exists.
-	if hasGemini3Flash {
-		const virtual = "gemini-3-flash-thinking"
-		if _, ok := seen[virtual]; !ok {
-			ids = append(ids, virtual)
-		}
-	}
-	// Virtual model injection: add claude-opus-4-5 when only claude-opus-4-5-thinking* exists.
-	if hasClaudeOpus45Thinking && !hasClaudeOpus45 {
-		const virtual = "claude-opus-4-5"
-		if _, ok := seen[virtual]; !ok {
-			ids = append(ids, virtual)
-		}
-	}
-	sort.Strings(ids)
+	ids := modelutil.BuildSortedModelIDs(vm.Models)
 
 	items := make([]ModelItem, 0, len(ids))
 	for _, mid := range ids {
@@ -97,13 +60,13 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 	if logger.IsClientLogEnabled() {
 		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
 	}
-	writeJSON(w, http.StatusOK, out)
+	httppkg.WriteJSON(w, http.StatusOK, out)
 }
 
 func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeOpenAIError(w, http.StatusBadRequest, "读取请求体失败，请检查请求是否正确发送。")
+		httppkg.WriteOpenAIError(w, http.StatusBadRequest, "读取请求体失败，请检查请求是否正确发送。")
 		return
 	}
 
@@ -113,30 +76,29 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	var req ChatRequest
 	if err := jsonpkg.Unmarshal(body, &req); err != nil {
-		writeOpenAIError(w, http.StatusBadRequest, "请求 JSON 解析失败，请检查请求体格式。")
+		httppkg.WriteOpenAIError(w, http.StatusBadRequest, "请求 JSON 解析失败，请检查请求体格式。")
 		return
 	}
 
 	acc, err := credential.GetStore().GetToken()
 	if err != nil {
-		writeOpenAIError(w, http.StatusServiceUnavailable, err.Error())
+		httppkg.WriteOpenAIError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
 	if acc.ProjectID == "" {
 		acc.ProjectID = id.ProjectID()
 	}
 
-	acct := &AccountContext{ProjectID: acc.ProjectID, SessionID: acc.SessionID, AccessToken: acc.AccessToken}
+	acct := &gwcommon.AccountContext{ProjectID: acc.ProjectID, SessionID: acc.SessionID, AccessToken: acc.AccessToken}
 	vreq, requestID, err := ToVertexRequest(&req, acct)
 	if err != nil {
-		writeOpenAIError(w, http.StatusBadRequest, err.Error())
+		httppkg.WriteOpenAIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	_ = requestID
 
 	ctx := r.Context()
 	if req.Stream {
-		handleStream(w, ctx, r, &req, vreq, requestID, acct)
+		handleStream(w, ctx, &req, vreq, requestID, acct)
 		return
 	}
 
@@ -144,9 +106,9 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	vresp, err := vertex.GenerateContent(ctx, vreq, acc.AccessToken)
 	if err != nil {
 		if logger.IsClientLogEnabled() {
-			logger.ClientResponse(statusFromVertexErr(err), time.Since(startTime), err.Error())
+			logger.ClientResponse(gwcommon.StatusFromVertexError(err), time.Since(startTime), err.Error())
 		}
-		writeOpenAIError(w, statusFromVertexErr(err), err.Error())
+		httppkg.WriteOpenAIError(w, gwcommon.StatusFromVertexError(err), err.Error())
 		return
 	}
 
@@ -154,19 +116,19 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if logger.IsClientLogEnabled() {
 		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
 	}
-	writeJSON(w, http.StatusOK, out)
+	httppkg.WriteJSON(w, http.StatusOK, out)
 }
 
-func handleStream(w http.ResponseWriter, ctx context.Context, r *http.Request, req *ChatRequest, vreq *vertex.Request, requestID string, acct *AccountContext) {
+func handleStream(w http.ResponseWriter, ctx context.Context, req *ChatRequest, vreq *vertex.Request, requestID string, acct *gwcommon.AccountContext) {
 	startTime := time.Now()
 	resp, err := vertex.GenerateContentStream(ctx, vreq, acct.AccessToken)
 	if err != nil {
-		SetSSEHeaders(w)
+		httppkg.SetSSEHeaders(w)
 		WriteSSEError(w, err.Error())
 		return
 	}
 
-	SetSSEHeaders(w)
+	httppkg.SetSSEHeaders(w)
 	writer := NewStreamWriter(w, id.ChatCompletionID(), time.Now().Unix(), req.Model, requestID)
 
 	streamResult, _ := vertex.ParseStreamWithResult(resp, func(data *vertex.StreamData) error {
@@ -198,31 +160,4 @@ func handleStream(w http.ResponseWriter, ctx context.Context, r *http.Request, r
 		finish = streamResult.FinishReason
 	}
 	writer.WriteFinish(finish, ConvertUsage(streamResult.Usage))
-}
-
-func statusFromVertexErr(err error) int {
-	if apiErr, ok := err.(*vertex.APIError); ok {
-		return apiErr.Status
-	}
-	return http.StatusInternalServerError
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	b, err := jsonpkg.Marshal(v)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_, _ = w.Write(b)
-}
-
-func writeOpenAIError(w http.ResponseWriter, status int, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_, _ = w.Write([]byte(`{"error":{"message":`))
-	b, _ := jsonpkg.MarshalString(msg)
-	_, _ = w.Write([]byte(b))
-	_, _ = w.Write([]byte(`,"type":"server_error"}}`))
 }

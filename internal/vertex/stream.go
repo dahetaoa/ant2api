@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"anti2api-golang/refactor/internal/logger"
+	httppkg "anti2api-golang/refactor/internal/pkg/http"
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
 )
 
@@ -298,10 +299,7 @@ func MergeParts(parts []any) []any {
 }
 
 func SetStreamHeaders(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
+	httppkg.SetSSEHeaders(w)
 }
 
 func WriteStreamDone(w http.ResponseWriter) {

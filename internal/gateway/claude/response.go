@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"anti2api-golang/refactor/internal/pkg/id"
+	"anti2api-golang/refactor/internal/pkg/modelutil"
 	sigpkg "anti2api-golang/refactor/internal/signature"
 	"anti2api-golang/refactor/internal/vertex"
 )
@@ -55,7 +56,7 @@ func ToMessagesResponse(resp *vertex.Response, requestID string, model string, i
 
 	sigMgr := sigpkg.GetManager()
 	for _, p := range parts {
-		if strings.HasPrefix(strings.TrimSpace(model), "claude-") && p.Thought && p.ThoughtSignature != "" {
+		if modelutil.IsClaude(model) && p.Thought && p.ThoughtSignature != "" {
 			thinkingSignature = p.ThoughtSignature
 		}
 		if p.Thought {
@@ -72,7 +73,7 @@ func ToMessagesResponse(resp *vertex.Response, requestID string, model string, i
 				idv = "toolu_" + id.RequestID()
 			}
 			sig := strings.TrimSpace(p.ThoughtSignature)
-			if sig == "" && strings.HasPrefix(strings.TrimSpace(model), "claude-") {
+			if sig == "" && modelutil.IsClaude(model) {
 				// Claude signatures may arrive on the thinking part (not on the functionCall part).
 				sig = thinkingSignature
 			}

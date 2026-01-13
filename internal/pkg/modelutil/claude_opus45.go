@@ -24,7 +24,7 @@ func ClaudeOpus45ThinkingConfig(model string) (budget int, backendModel string, 
 
 	// Check "-thinking" first to avoid false matches.
 	if strings.HasPrefix(m, thinking) {
-		return 32000, m, true
+		return DefaultClaudeThinkingBudgetTokens, m, true
 	}
 	if strings.HasPrefix(m, base) {
 		suffix := strings.TrimPrefix(m, base) // "" or e.g. "-latest"

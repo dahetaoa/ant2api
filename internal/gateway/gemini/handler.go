@@ -10,6 +10,7 @@ import (
 
 	"anti2api-golang/refactor/internal/credential"
 	"anti2api-golang/refactor/internal/logger"
+	httppkg "anti2api-golang/refactor/internal/pkg/http"
 	"anti2api-golang/refactor/internal/pkg/id"
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
 	"anti2api-golang/refactor/internal/pkg/modelutil"
@@ -51,34 +52,22 @@ type GeminiResponse struct {
 
 func toVertexGenerationConfig(model string, cfg *GeminiGenerationConfig) *vertex.GenerationConfig {
 	model = strings.TrimSpace(model)
-	isClaude := strings.HasPrefix(model, "claude-")
-	isGemini3 := strings.HasPrefix(model, "gemini-3-") || strings.HasPrefix(model, "gemini-3")
-	isGemini := strings.HasPrefix(model, "gemini-")
-	flashLevel, _, isGemini3Flash := modelutil.Gemini3FlashThinkingConfig(model)
-	sonnet45Budget, isClaudeSonnet45 := modelutil.ClaudeSonnet45ThinkingBudget(model)
-	opus45Budget, _, isClaudeOpus45 := modelutil.ClaudeOpus45ThinkingConfig(model)
-	forcedClaudeBudget := isClaudeSonnet45 || isClaudeOpus45
+	isClaude := modelutil.IsClaude(model)
+	isGemini := modelutil.IsGemini(model)
+	forcedThinking, forced := modelutil.ForcedThinkingConfig(model)
 
 	if cfg == nil {
 		if isClaude {
-			out := &vertex.GenerationConfig{CandidateCount: 1, MaxOutputTokens: 64000}
-			if isClaudeSonnet45 {
-				out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: sonnet45Budget}
-			}
-			if isClaudeOpus45 {
-				out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: opus45Budget}
+			out := &vertex.GenerationConfig{CandidateCount: 1, MaxOutputTokens: modelutil.ClaudeMaxOutputTokens}
+			if forced {
+				out.ThinkingConfig = forcedThinking
 			}
 			return out
 		}
 		if isGemini {
-			out := &vertex.GenerationConfig{CandidateCount: 1, MaxOutputTokens: 65535}
-			if isGemini3Flash {
-				// Gemini 3 Flash: ignore client thinking params; force by model name.
-				if flashLevel == "high" {
-					out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingLevel: "high", ThinkingBudget: 0}
-				} else {
-					out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: 0}
-				}
+			out := &vertex.GenerationConfig{CandidateCount: 1, MaxOutputTokens: modelutil.GeminiMaxOutputTokens}
+			if forced {
+				out.ThinkingConfig = forcedThinking
 			}
 			return out
 		}
@@ -87,113 +76,65 @@ func toVertexGenerationConfig(model string, cfg *GeminiGenerationConfig) *vertex
 	out := &vertex.GenerationConfig{CandidateCount: cfg.CandidateCount, StopSequences: cfg.StopSequences, MaxOutputTokens: cfg.MaxOutputTokens, TopK: cfg.TopK}
 	out.Temperature = cfg.Temperature
 	out.TopP = cfg.TopP
-	if forcedClaudeBudget {
-		// Claude Sonnet 4.5: ignore client thinking params; force by model name.
-		// Claude Opus 4.5: ignore client thinking params; force by model name.
-		budget := sonnet45Budget
-		if isClaudeOpus45 {
-			budget = opus45Budget
-		}
-		out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: budget}
-	} else if !isGemini3Flash && cfg.ThinkingConfig != nil {
-		out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: cfg.ThinkingConfig.IncludeThoughts, ThinkingBudget: cfg.ThinkingConfig.ThinkingBudget, ThinkingLevel: cfg.ThinkingConfig.ThinkingLevel}
-	}
-
-	// Gemini 3 models: always use thinking_level=high when thinking is requested.
-	if isGemini3 && !isGemini3Flash && out.ThinkingConfig != nil && out.ThinkingConfig.IncludeThoughts {
-		out.ThinkingConfig.ThinkingLevel = "high"
-		out.ThinkingConfig.ThinkingBudget = 0
-	}
-
-	// Claude thinking models require a non-zero thinkingBudget to output thoughts.
-	if isClaude && !forcedClaudeBudget && out.ThinkingConfig != nil && out.ThinkingConfig.IncludeThoughts {
-		out.ThinkingConfig.ThinkingLevel = ""
-		if out.ThinkingConfig.ThinkingBudget <= 0 {
-			out.ThinkingConfig.ThinkingBudget = 32000
+	if forced {
+		// Gemini 3 Flash / Claude 4.5：忽略客户端 thinking 参数，由模型名强制决定。
+		out.ThinkingConfig = forcedThinking
+	} else if cfg.ThinkingConfig != nil {
+		if cfg.ThinkingConfig.IncludeThoughts {
+			out.ThinkingConfig = modelutil.ThinkingConfigFromGemini(model, true, cfg.ThinkingConfig.ThinkingBudget, cfg.ThinkingConfig.ThinkingLevel)
+		} else {
+			// 保持原行为：客户端显式传 includeThoughts=false 时也透传该结构。
+			out.ThinkingConfig = &vertex.ThinkingConfig{
+				IncludeThoughts: false,
+				ThinkingBudget:  cfg.ThinkingConfig.ThinkingBudget,
+				ThinkingLevel:   cfg.ThinkingConfig.ThinkingLevel,
+			}
 		}
 	}
 
 	// Claude models: maxOutputTokens is fixed at 64000.
 	if isClaude {
-		out.MaxOutputTokens = 64000
+		out.MaxOutputTokens = modelutil.ClaudeMaxOutputTokens
 	}
 	// Gemini models: maxOutputTokens is fixed at 65535.
 	if isGemini {
-		out.MaxOutputTokens = 65535
+		out.MaxOutputTokens = modelutil.GeminiMaxOutputTokens
 	}
 
 	// When thinkingBudget is used, ensure it's compatible with maxOutputTokens.
 	if out.ThinkingConfig != nil && out.ThinkingConfig.IncludeThoughts {
 		if out.MaxOutputTokens <= 0 {
 			if isClaude {
-				out.MaxOutputTokens = 64000
+				out.MaxOutputTokens = modelutil.ClaudeMaxOutputTokens
 			} else if isGemini {
-				out.MaxOutputTokens = 65535
+				out.MaxOutputTokens = modelutil.GeminiMaxOutputTokens
 			} else if out.ThinkingConfig.ThinkingBudget > 0 {
-				out.MaxOutputTokens = out.ThinkingConfig.ThinkingBudget + 4096
+				out.MaxOutputTokens = out.ThinkingConfig.ThinkingBudget + modelutil.ThinkingMaxOutputTokensOverheadTokens
 			} else {
 				out.MaxOutputTokens = 8192
 			}
 		}
 		if out.ThinkingConfig.ThinkingBudget > 0 {
 			if isClaude {
-				maxBudget := out.MaxOutputTokens - 1024
-				if maxBudget < 1024 {
-					maxBudget = 1024
+				maxBudget := out.MaxOutputTokens - modelutil.ThinkingBudgetHeadroomTokens
+				if maxBudget < modelutil.ThinkingBudgetMinTokens {
+					maxBudget = modelutil.ThinkingBudgetMinTokens
 				}
 				if out.ThinkingConfig.ThinkingBudget > maxBudget {
 					out.ThinkingConfig.ThinkingBudget = maxBudget
 				}
 			} else if isGemini && out.MaxOutputTokens <= out.ThinkingConfig.ThinkingBudget {
-				maxBudget := out.MaxOutputTokens - 1024
-				if maxBudget < 1024 {
-					maxBudget = 1024
+				maxBudget := out.MaxOutputTokens - modelutil.ThinkingBudgetHeadroomTokens
+				if maxBudget < modelutil.ThinkingBudgetMinTokens {
+					maxBudget = modelutil.ThinkingBudgetMinTokens
 				}
 				out.ThinkingConfig.ThinkingBudget = maxBudget
 			} else if out.MaxOutputTokens <= out.ThinkingConfig.ThinkingBudget {
-				out.MaxOutputTokens = out.ThinkingConfig.ThinkingBudget + 4096
+				out.MaxOutputTokens = out.ThinkingConfig.ThinkingBudget + modelutil.ThinkingMaxOutputTokensOverheadTokens
 			}
 		}
 	}
 
-	// Gemini 3 Flash: ignore any client-provided thinkingConfig; force by model name.
-	if isGemini3Flash {
-		if flashLevel == "high" {
-			out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingLevel: "high", ThinkingBudget: 0}
-		} else {
-			out.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: 0}
-		}
-	}
-
-	return out
-}
-
-func sanitizeContents(contents []vertex.Content) []vertex.Content {
-	if len(contents) == 0 {
-		return contents
-	}
-
-	out := make([]vertex.Content, 0, len(contents))
-	for _, c := range contents {
-		parts := make([]vertex.Part, 0, len(c.Parts))
-		for _, p := range c.Parts {
-			// Vertex requires each part to have oneof data set; drop empty parts.
-			if p.FunctionCall != nil || p.FunctionResponse != nil || p.InlineData != nil {
-				parts = append(parts, p)
-				continue
-			}
-			if p.Text != "" {
-				parts = append(parts, p)
-				continue
-			}
-			// thoughtSignature-only / empty text parts are invalid for Vertex; skip.
-		}
-		if len(parts) == 0 {
-			continue
-		}
-		c.Parts = parts
-		out = append(out, c)
-	}
 	return out
 }
 
@@ -251,7 +192,7 @@ func HandleModels(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(r.URL.Path, prefix)
 	if rest == "" || rest == "/" {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"message": "不支持的请求方法，请使用 GET。"}})
+			httppkg.WriteJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"message": "不支持的请求方法，请使用 GET。"}})
 			return
 		}
 		HandleListModels(w, r)
@@ -280,7 +221,7 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 		if logger.IsClientLogEnabled() {
 			logger.ClientResponse(http.StatusServiceUnavailable, time.Since(startTime), err.Error())
 		}
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": map[string]any{"message": err.Error()}})
+		httppkg.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": map[string]any{"message": err.Error()}})
 		return
 	}
 	if acc.ProjectID == "" {
@@ -296,59 +237,25 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 		if logger.IsClientLogEnabled() {
 			logger.ClientResponse(status, time.Since(startTime), err.Error())
 		}
-		writeJSON(w, status, map[string]any{"error": map[string]any{"message": err.Error()}})
+		httppkg.WriteJSON(w, status, map[string]any{"error": map[string]any{"message": err.Error()}})
 		return
 	}
-	models := make([]GeminiModel, 0, len(vm.Models))
-	hasGemini3Flash := false
-	hasGemini3FlashThinking := false
-	hasClaudeOpus45 := false
-	hasClaudeOpus45Thinking := false
-	for modelID := range vm.Models {
-		modelID = strings.TrimSpace(modelID)
-		if modelID == "" {
-			continue
-		}
-		lower := strings.ToLower(modelID)
-		if strings.Contains(lower, "gemini-3-flash") {
-			hasGemini3Flash = true
-		}
-		if strings.HasPrefix(lower, "gemini-3-flash-thinking") {
-			hasGemini3FlashThinking = true
-		}
-		if strings.HasPrefix(lower, "claude-opus-4-5-thinking") {
-			hasClaudeOpus45Thinking = true
-		} else if strings.HasPrefix(lower, "claude-opus-4-5") {
-			hasClaudeOpus45 = true
+	ids := modelutil.BuildSortedModelIDs(vm.Models)
+	models := make([]GeminiModel, 0, len(ids))
+	for _, modelID := range ids {
+		desc := "Model provided by google"
+		if _, ok := vm.Models[modelID]; !ok {
+			switch strings.ToLower(strings.TrimSpace(modelID)) {
+			case "gemini-3-flash-thinking":
+				desc = "Virtual model provided by google (gemini-3-flash with thinkingLevel=high)"
+			case "claude-opus-4-5":
+				desc = "Virtual model provided by anthropic (claude-opus-4-5-thinking with thinkingBudget=0)"
+			}
 		}
 		models = append(models, GeminiModel{
 			Name:        "models/" + modelID,
 			DisplayName: modelID,
-			Description: "Model provided by google",
-			SupportedGenerationMethods: []string{
-				"generateContent",
-				"streamGenerateContent",
-			},
-		})
-	}
-	// Virtual model injection: add "models/gemini-3-flash-thinking" when any Gemini 3 Flash model exists.
-	if hasGemini3Flash && !hasGemini3FlashThinking {
-		models = append(models, GeminiModel{
-			Name:        "models/gemini-3-flash-thinking",
-			DisplayName: "gemini-3-flash-thinking",
-			Description: "Virtual model provided by google (gemini-3-flash with thinkingLevel=high)",
-			SupportedGenerationMethods: []string{
-				"generateContent",
-				"streamGenerateContent",
-			},
-		})
-	}
-	// Virtual model injection: add "models/claude-opus-4-5" when only claude-opus-4-5-thinking* exists.
-	if hasClaudeOpus45Thinking && !hasClaudeOpus45 {
-		models = append(models, GeminiModel{
-			Name:        "models/claude-opus-4-5",
-			DisplayName: "claude-opus-4-5",
-			Description: "Virtual model provided by anthropic (claude-opus-4-5-thinking with thinkingBudget=0)",
+			Description: desc,
 			SupportedGenerationMethods: []string{
 				"generateContent",
 				"streamGenerateContent",
@@ -359,7 +266,7 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 	if logger.IsClientLogEnabled() {
 		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
 	}
-	writeJSON(w, http.StatusOK, out)
+	httppkg.WriteJSON(w, http.StatusOK, out)
 }
 
 func modelFromPath(r *http.Request) (string, bool) {
@@ -384,12 +291,12 @@ func modelFromPath(r *http.Request) (string, bool) {
 func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 	model, ok := modelFromPath(r)
 	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"message": "未找到对应的模型或接口。"}})
+		httppkg.WriteJSON(w, http.StatusNotFound, map[string]any{"error": map[string]any{"message": "未找到对应的模型或接口。"}})
 		return
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "读取请求体失败，请检查请求是否正确发送。"}})
+		httppkg.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "读取请求体失败，请检查请求是否正确发送。"}})
 		return
 	}
 
@@ -398,32 +305,26 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 	}
 	var req GeminiRequest
 	if err := jsonpkg.Unmarshal(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "请求 JSON 解析失败，请检查请求体格式。"}})
+		httppkg.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "请求 JSON 解析失败，请检查请求体格式。"}})
 		return
 	}
 
 	acc, err := credential.GetStore().GetToken()
 	if err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": map[string]any{"message": err.Error()}})
+		httppkg.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": map[string]any{"message": err.Error()}})
 		return
 	}
 	if acc.ProjectID == "" {
 		acc.ProjectID = id.ProjectID()
 	}
 
-	backendModel := model
-	if _, bm, ok := modelutil.Gemini3FlashThinkingConfig(model); ok {
-		backendModel = bm
-	}
-	if _, bm, ok := modelutil.ClaudeOpus45ThinkingConfig(model); ok {
-		backendModel = bm
-	}
+	backendModel := modelutil.BackendModelID(model)
 	vreq := &vertex.Request{
 		Project:   acc.ProjectID,
 		Model:     backendModel,
 		RequestID: id.RequestID(),
 		Request: vertex.InnerReq{
-			Contents:          sanitizeContents(req.Contents),
+			Contents:          vertex.SanitizeContents(req.Contents),
 			SystemInstruction: req.SystemInstruction,
 			GenerationConfig:  toVertexGenerationConfig(model, req.GenerationConfig),
 			Tools:             req.Tools,
@@ -439,7 +340,7 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 	if rid := strings.TrimSpace(r.Header.Get("X-Request-ID")); rid != "" {
 		vreq.RequestID = rid
 	}
-	isImageModel := strings.Contains(strings.ToLower(strings.TrimSpace(model)), "image")
+	isImageModel := modelutil.IsImageModel(model)
 	isGemini3Flash := modelutil.IsGemini3Flash(model)
 	shouldSkipSystemPrompt := isImageModel || isGemini3Flash
 	if !shouldSkipSystemPrompt {
@@ -459,7 +360,7 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 		if logger.IsClientLogEnabled() {
 			logger.ClientResponse(status, time.Since(startTime), err.Error())
 		}
-		writeJSON(w, status, map[string]any{"error": map[string]any{"message": err.Error()}})
+		httppkg.WriteJSON(w, status, map[string]any{"error": map[string]any{"message": err.Error()}})
 		return
 	}
 
@@ -467,7 +368,7 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 	if logger.IsClientLogEnabled() {
 		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
 	}
-	writeJSON(w, http.StatusOK, out)
+	httppkg.WriteJSON(w, http.StatusOK, out)
 }
 
 func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
@@ -504,19 +405,13 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 		acc.ProjectID = id.ProjectID()
 	}
 
-	backendModel := model
-	if _, bm, ok := modelutil.Gemini3FlashThinkingConfig(model); ok {
-		backendModel = bm
-	}
-	if _, bm, ok := modelutil.ClaudeOpus45ThinkingConfig(model); ok {
-		backendModel = bm
-	}
+	backendModel := modelutil.BackendModelID(model)
 	vreq := &vertex.Request{
 		Project:   acc.ProjectID,
 		Model:     backendModel,
 		RequestID: id.RequestID(),
 		Request: vertex.InnerReq{
-			Contents:          sanitizeContents(req.Contents),
+			Contents:          vertex.SanitizeContents(req.Contents),
 			SystemInstruction: req.SystemInstruction,
 			GenerationConfig:  toVertexGenerationConfig(model, req.GenerationConfig),
 			Tools:             req.Tools,
@@ -532,7 +427,7 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 	if rid := strings.TrimSpace(r.Header.Get("X-Request-ID")); rid != "" {
 		vreq.RequestID = rid
 	}
-	isImageModel := strings.Contains(strings.ToLower(strings.TrimSpace(model)), "image")
+	isImageModel := modelutil.IsImageModel(model)
 	isGemini3Flash := modelutil.IsGemini3Flash(model)
 	shouldSkipSystemPrompt := isImageModel || isGemini3Flash
 	if !shouldSkipSystemPrompt {
@@ -634,13 +529,4 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	b, err := jsonpkg.Marshal(v)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_, _ = w.Write(b)
-}
+// JSON 输出统一由 internal/pkg/http 处理。

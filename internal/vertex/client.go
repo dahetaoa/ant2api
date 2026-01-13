@@ -182,7 +182,6 @@ func (c *Client) SendStreamRequest(ctx context.Context, req *Request, accessToke
 		logger.BackendResponse(resp.StatusCode, time.Since(startTime), string(respBody))
 		return nil, ExtractErrorDetails(resp, respBody)
 	}
-	_ = startTime
 
 	return resp, nil
 }

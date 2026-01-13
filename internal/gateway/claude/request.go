@@ -29,8 +29,9 @@ type ContentBlock struct {
 	Input     any    `json:"input,omitempty"`
 	ToolUseID string `json:"tool_use_id,omitempty"`
 	Content   any    `json:"content,omitempty"`
-	IsError   bool   `json:"is_error,omitempty"`
-	Source    any    `json:"source,omitempty"`
+	// IsError/Source 为 Anthropic/Claude 兼容字段：当前未参与到 Vertex 转换（保持历史行为）。
+	IsError bool `json:"is_error,omitempty"`
+	Source  any  `json:"source,omitempty"`
 }
 
 type Tool struct {

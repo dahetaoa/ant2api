@@ -4,19 +4,14 @@ import (
 	"errors"
 	"strings"
 
+	gwcommon "anti2api-golang/refactor/internal/gateway/common"
 	"anti2api-golang/refactor/internal/pkg/id"
 	"anti2api-golang/refactor/internal/pkg/modelutil"
 	"anti2api-golang/refactor/internal/signature"
 	"anti2api-golang/refactor/internal/vertex"
 )
 
-type AccountContext struct {
-	ProjectID   string
-	SessionID   string
-	AccessToken string
-}
-
-func ToVertexRequest(req *MessagesRequest, account *AccountContext) (*vertex.Request, string, error) {
+func ToVertexRequest(req *MessagesRequest, account *gwcommon.AccountContext) (*vertex.Request, string, error) {
 	if req == nil {
 		return nil, "", errors.New("nil request")
 	}
@@ -25,20 +20,12 @@ func ToVertexRequest(req *MessagesRequest, account *AccountContext) (*vertex.Req
 	}
 
 	model := strings.TrimSpace(req.Model)
-	isClaudeModel := strings.HasPrefix(model, "claude-")
-	isImageModel := strings.Contains(strings.ToLower(model), "image")
+	isClaudeModel := modelutil.IsClaude(model)
+	isImageModel := modelutil.IsImageModel(model)
 	isGemini3Flash := modelutil.IsGemini3Flash(model)
 
 	requestID := id.RequestID()
-	vertexModel := req.Model
-	if _, backendModel, ok := modelutil.Gemini3FlashThinkingConfig(req.Model); ok {
-		// Virtual Gemini 3 Flash models map to the same backend model id.
-		vertexModel = backendModel
-	}
-	if _, backendModel, ok := modelutil.ClaudeOpus45ThinkingConfig(req.Model); ok {
-		// Virtual Claude Opus 4.5 (non "-thinking") maps to the "-thinking" backend model id.
-		vertexModel = backendModel
-	}
+	vertexModel := modelutil.BackendModelID(req.Model)
 	vreq := &vertex.Request{
 		Project:   account.ProjectID,
 		Model:     vertexModel,
@@ -51,7 +38,7 @@ func ToVertexRequest(req *MessagesRequest, account *AccountContext) (*vertex.Req
 	vreq.RequestType = "agent"
 	vreq.UserAgent = "antigravity"
 
-	if sys := extractSystem(req.System); sys != "" {
+	if sys := gwcommon.ExtractClaudeSystemText(req.System); sys != "" {
 		vreq.Request.SystemInstruction = &vertex.SystemInstruction{Role: "user", Parts: []vertex.Part{{Text: sys}}}
 	}
 
@@ -76,17 +63,16 @@ func ToVertexRequest(req *MessagesRequest, account *AccountContext) (*vertex.Req
 
 func buildGenerationConfig(req *MessagesRequest) *vertex.GenerationConfig {
 	model := strings.TrimSpace(req.Model)
-	isClaude := strings.HasPrefix(model, "claude-")
-	isGemini := strings.HasPrefix(model, "gemini-")
-	isGemini3 := strings.HasPrefix(model, "gemini-3-") || strings.HasPrefix(model, "gemini-3")
+	isClaude := modelutil.IsClaude(model)
+	isGemini := modelutil.IsGemini(model)
 
 	cfg := &vertex.GenerationConfig{CandidateCount: 1}
 	// Claude models: maxOutputTokens is fixed at 64000.
 	if isClaude {
-		cfg.MaxOutputTokens = 64000
+		cfg.MaxOutputTokens = modelutil.ClaudeMaxOutputTokens
 	} else if isGemini {
 		// Gemini models: maxOutputTokens is fixed at 65535.
-		cfg.MaxOutputTokens = 65535
+		cfg.MaxOutputTokens = modelutil.GeminiMaxOutputTokens
 	} else if req.MaxTokens > 0 {
 		cfg.MaxOutputTokens = req.MaxTokens
 	} else {
@@ -102,53 +88,17 @@ func buildGenerationConfig(req *MessagesRequest) *vertex.GenerationConfig {
 		cfg.StopSequences = append(cfg.StopSequences, req.StopSequences...)
 	}
 
-	// Claude Sonnet 4.5: thinkingBudget is determined solely by the model name.
-	// Always ignore client-provided thinking params for these models.
-	if budget, ok := modelutil.ClaudeSonnet45ThinkingBudget(model); ok {
-		cfg.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: budget}
-	} else if budget, _, ok := modelutil.ClaudeOpus45ThinkingConfig(model); ok {
-		// Claude Opus 4.5: thinkingBudget is determined solely by the model name.
-		// Always ignore client-provided thinking params for these models.
-		cfg.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: budget}
-	} else if level, _, ok := modelutil.Gemini3FlashThinkingConfig(model); ok {
-		// Gemini 3 Flash: thinkingLevel is determined solely by the model name.
-		// Always ignore client-provided thinking params for these models.
-		if level == "high" {
-			cfg.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingLevel: "high", ThinkingBudget: 0}
-		} else {
-			cfg.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true, ThinkingBudget: 0}
-		}
-	} else if req.Thinking != nil && strings.ToLower(req.Thinking.Type) == "enabled" {
-		cfg.ThinkingConfig = &vertex.ThinkingConfig{IncludeThoughts: true}
-		if isClaude {
-			// Claude thinking models require a non-zero thinkingBudget to output thoughts.
-			budget := req.Thinking.Budget
-			if budget <= 0 {
-				budget = req.Thinking.BudgetTokens
-			}
-			if budget <= 0 {
-				budget = 32000
-			}
-			cfg.ThinkingConfig.ThinkingBudget = budget
-		} else if isGemini3 {
-			// Gemini 3 non-Flash models (e.g. gemini-3-pro): always use thinking_level=high when thinking is requested.
-			cfg.ThinkingConfig.ThinkingLevel = "high"
-			cfg.ThinkingConfig.ThinkingBudget = 0
-		} else {
-			budget := req.Thinking.Budget
-			if budget <= 0 {
-				budget = req.Thinking.BudgetTokens
-			}
-			if budget > 0 {
-				cfg.ThinkingConfig.ThinkingBudget = budget
-			}
-		}
+	if req.Thinking != nil {
+		cfg.ThinkingConfig = modelutil.ThinkingConfigFromClaude(model, req.Thinking.Type, req.Thinking.Budget, req.Thinking.BudgetTokens)
+	} else {
+		// 允许由模型名强制启用 thinking（例如 gemini-3-flash / claude 4.5）。
+		cfg.ThinkingConfig, _ = modelutil.ForcedThinkingConfig(model)
 	}
 
 	if cfg.ThinkingConfig != nil && cfg.ThinkingConfig.ThinkingBudget > 0 {
-		maxBudget := cfg.MaxOutputTokens - 1024
-		if maxBudget < 1024 {
-			maxBudget = 1024
+		maxBudget := cfg.MaxOutputTokens - modelutil.ThinkingBudgetHeadroomTokens
+		if maxBudget < modelutil.ThinkingBudgetMinTokens {
+			maxBudget = modelutil.ThinkingBudgetMinTokens
 		}
 		if cfg.ThinkingConfig.ThinkingBudget > maxBudget {
 			cfg.ThinkingConfig.ThinkingBudget = maxBudget
@@ -302,7 +252,7 @@ func extractContentParts(content any, contentsSoFar []vertex.Content, isClaudeMo
 					// Preserve request semantics: a tool_result must reference a prior tool_use.
 					return out, nil
 				}
-				name := findFunctionName(contentsSoFar, toolUseID)
+				name := gwcommon.FindFunctionName(contentsSoFar, toolUseID)
 				name = strings.TrimSpace(name)
 				if name == "" {
 					return out, nil
@@ -333,39 +283,6 @@ func extractToolResultContent(content any) string {
 			}
 		}
 		return b.String()
-	}
-	return ""
-}
-
-func findFunctionName(contents []vertex.Content, toolCallID string) string {
-	for i := len(contents) - 1; i >= 0; i-- {
-		for _, p := range contents[i].Parts {
-			if p.FunctionCall != nil && p.FunctionCall.ID == toolCallID {
-				return p.FunctionCall.Name
-			}
-		}
-	}
-	return ""
-}
-
-func extractSystem(system any) string {
-	switch v := system.(type) {
-	case string:
-		return v
-	case []any:
-		var texts []string
-		for _, it := range v {
-			m, ok := it.(map[string]any)
-			if !ok {
-				continue
-			}
-			if m["type"] == "text" {
-				if t, ok := m["text"].(string); ok && t != "" {
-					texts = append(texts, t)
-				}
-			}
-		}
-		return strings.Join(texts, "\n\n")
 	}
 	return ""
 }

@@ -12,6 +12,8 @@ type Manager struct {
 	store *Store
 }
 
+const defaultSignatureLRUCapacity = 50_000 // 默认签名索引缓存容量（LRU 条目数）。
+
 var (
 	managerOnce sync.Once
 	managerInst *Manager
@@ -20,7 +22,7 @@ var (
 func GetManager() *Manager {
 	managerOnce.Do(func() {
 		cfg := config.Get()
-		cache := NewLRU(50_000)
+		cache := NewLRU(defaultSignatureLRUCapacity)
 		store := NewStore(cfg.DataDir, cache)
 		store.LoadRecent(3)
 		store.Start()
