@@ -1,6 +1,5 @@
 package config
 
-
 import (
 	"os"
 	"path/filepath"
@@ -16,22 +15,24 @@ type Endpoint struct {
 	Host  string
 }
 
+const DefaultBackendHost = "daily-cloudcode-pa.sandbox.googleapis.com"
+
 var (
 	APIEndpoints = map[string]Endpoint{
 		"daily": {
 			Key:   "daily",
 			Label: "Daily (Sandbox)",
-			Host:  "daily-cloudcode-pa.sandbox.googleapis.com",
+			Host:  DefaultBackendHost,
 		},
 		"autopush": {
 			Key:   "autopush",
 			Label: "Autopush (Sandbox)",
-			Host:  "autopush-cloudcode-pa.sandbox.googleapis.com",
+			Host:  DefaultBackendHost,
 		},
 		"production": {
 			Key:   "production",
 			Label: "Production",
-			Host:  "cloudcode-pa.googleapis.com",
+			Host:  DefaultBackendHost,
 		},
 	}
 
