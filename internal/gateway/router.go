@@ -66,6 +66,13 @@ func NewRouter() http.Handler {
 	managerMux.HandleFunc("/manager/api/quota/all", manager.HandleQuotaAll)
 	managerMux.HandleFunc("/manager/api/oauth/url", manager.HandleOAuthURL)
 	managerMux.HandleFunc("/manager/api/oauth/parse-url", manager.HandleOAuthParseURL)
+	managerMux.HandleFunc("/manager/api/settings", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			manager.HandleSettingsPost(w, r)
+		} else {
+			manager.HandleSettingsGet(w, r)
+		}
+	})
 
 	// Mount the protected manager logic at root
 	mux.Handle("/", manager.ManagerAuth(managerMux))

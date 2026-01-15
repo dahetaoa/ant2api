@@ -109,20 +109,26 @@ func calculateStats(accounts []credential.Account) map[string]int {
 	total := len(accounts)
 	active := 0
 	expired := 0
+	disabled := 0
 	now := time.Now().UnixMilli()
 
 	for _, acc := range accounts {
-		if acc.Enable && !acc.IsExpired(now) {
-			active++
-		} else {
+		if !acc.Enable {
+			disabled++
+			continue
+		}
+		if acc.IsExpired(now) {
 			expired++
+		} else {
+			active++
 		}
 	}
 
 	return map[string]int{
-		"total":   total,
-		"active":  active,
-		"expired": expired,
+		"total":    total,
+		"active":   active,
+		"expired":  expired,
+		"disabled": disabled,
 	}
 }
 
@@ -601,4 +607,63 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+// HandleSettingsGet returns the current settings as JSON or HTML
+func HandleSettingsGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "不支持的请求方法", http.StatusMethodNotAllowed)
+		return
+	}
+
+	settings := config.GetWebUISettings()
+
+	if isHTMX(r) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		views.SettingsView(settings).Render(r.Context(), w)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, settings)
+}
+
+// HandleSettingsPost saves the settings to .env file and updates in-memory config
+func HandleSettingsPost(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "不支持的请求方法", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req config.WebUISettings
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "请求体不是有效的 JSON"})
+		return
+	}
+
+	// Validate required fields
+	if strings.TrimSpace(req.WebUIPassword) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "WebUI 登录密码不能为空"})
+		return
+	}
+
+	// Validate debug level
+	debug := strings.ToLower(strings.TrimSpace(req.Debug))
+	if debug != "" && debug != "off" && debug != "low" && debug != "high" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "日志级别必须是 off、low 或 high"})
+		return
+	}
+	if debug == "" {
+		debug = "off"
+	}
+	req.Debug = debug
+
+	// Update settings
+	if err := config.UpdateWebUISettings(req); err != nil {
+		logger.Error("保存设置失败: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "保存设置失败: " + err.Error()})
+		return
+	}
+
+	logger.Info("设置已更新: Debug=%s, UserAgent=%s", req.Debug, req.UserAgent)
+	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }

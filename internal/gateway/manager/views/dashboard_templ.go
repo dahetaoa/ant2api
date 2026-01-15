@@ -47,7 +47,7 @@ func Dashboard(accounts []credential.Account, stats map[string]int) templ.Compon
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"fixed top-0 left-0 right-0 z-50 bg-white shadow py-3 px-6\"><div class=\"max-w-7xl mx-auto flex items-center justify-center\"><div class=\"font-bold text-xl tracking-tight text-slate-900\">Antigravity 2 API 管理面板</div></div></div><div class=\"max-w-7xl mx-auto px-6 space-y-8 mt-4\"><!-- Overview Section --><div class=\"bg-white rounded-2xl p-6 shadow-sm border border-slate-100\"><div class=\"flex justify-between items-center mb-6\"><h2 class=\"text-lg font-bold text-slate-800\">概览</h2><div class=\"flex gap-3\"><button class=\"px-4 py-2 text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2\" hx-post=\"/manager/api/refresh_all\" hx-swap=\"none\" hx-indicator=\"#refresh-indicator\" hx-on::after-request=\"document.body.dispatchEvent(new CustomEvent('showMessage', { detail: { message: '所有账号信息已刷新', type: 'success' } }))\"><span id=\"refresh-indicator\" class=\"htmx-indicator animate-spin\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M21 12a9 9 0 1 1-6.219-8.56\"></path></svg></span> <span class=\"htmx-request:hidden\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"></path><path d=\"M21 3v5h-5\"></path><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"></path><path d=\"M3 21v-5h5\"></path></svg></span> 刷新全部</button></div></div><div class=\"grid grid-cols-1 md:grid-cols-3 gap-4\" hx-get=\"/manager/api/stats\" hx-trigger=\"every 10s, refreshStats from:body\" hx-swap=\"innerHTML\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 py-3 px-6\"><div class=\"max-w-7xl mx-auto flex items-center justify-center\"><div class=\"font-semibold text-xl tracking-tight text-slate-900\">Antigravity 2 API</div></div></div><div class=\"max-w-7xl mx-auto px-6 mt-2\"><!-- Navigation Tabs --><div class=\"flex border-b border-slate-100 mb-6\"><button class=\"px-6 py-3 text-sm font-medium border-b-2 border-blue-600 text-blue-600 -mb-px transition-colors cursor-pointer\" onclick=\"switchTab('accounts', this)\">账号管理</button> <button class=\"px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 -mb-px transition-colors cursor-pointer\" onclick=\"switchTab('settings', this)\">系统设置</button></div><!-- Accounts View --><div id=\"tab-accounts\" class=\"space-y-8\"><!-- Stats Grid --><div class=\"grid grid-cols-2 md:grid-cols-4 gap-4\" hx-get=\"/manager/api/stats\" hx-trigger=\"every 10s, refreshStats from:body\" hx-swap=\"innerHTML\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -55,7 +55,7 @@ func Dashboard(accounts []credential.Account, stats map[string]int) templ.Compon
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</div></div><!-- OAuth Login --><div class=\"bg-white rounded-2xl p-6 shadow-sm border border-slate-100\"><h3 class=\"text-lg font-bold text-slate-800 mb-4\">OAuth 登录（Google）</h3><div class=\"space-y-4\"><div class=\"flex flex-col md:flex-row gap-4 md:items-center\"><button type=\"button\" id=\"oauthStartBtn\" class=\"px-6 py-2.5 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors shadow-sm shadow-emerald-200\">发起 OAuth 登录</button><div class=\"text-xs text-slate-500\">请在新窗口完成 Google 授权，然后复制回调页面地址栏中的完整 URL</div></div><div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\"><div><label class=\"block text-sm font-medium text-slate-700 mb-1\">回调 URL（完整）</label> <input type=\"text\" id=\"oauthCallbackUrl\" class=\"w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50 transition-all text-sm\" placeholder=\"粘贴 http://localhost:.../oauth-callback?code=...&state=...\"></div><div><label class=\"block text-sm font-medium text-slate-700 mb-1\">自定义项目ID（可选）</label> <input type=\"text\" id=\"oauthCustomProjectId\" class=\"w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50 transition-all text-sm\" placeholder=\"例如 my-project-id\"></div></div><div class=\"flex items-center gap-2\"><input type=\"checkbox\" id=\"oauthAllowRandomProjectId\" class=\"h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500\"> <label for=\"oauthAllowRandomProjectId\" class=\"text-sm text-slate-700\">允许使用随机项目ID（无法自动获取时）</label></div><div class=\"flex flex-col md:flex-row gap-4 md:items-center\"><button type=\"button\" id=\"oauthSubmitBtn\" class=\"px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200\">提交回调URL</button><div id=\"oauthStatus\" class=\"text-sm text-slate-600\"></div></div></div><script>\n\t\t\t\t\t(() => {\n\t\t\t\t\t\tconst startBtn = document.getElementById('oauthStartBtn');\n\t\t\t\t\t\tconst submitBtn = document.getElementById('oauthSubmitBtn');\n\t\t\t\t\t\tconst statusEl = document.getElementById('oauthStatus');\n\n\t\t\t\t\t\tconst setStatus = (msg, type) => {\n\t\t\t\t\t\t\tstatusEl.textContent = msg || '';\n\t\t\t\t\t\t\tstatusEl.className = 'text-sm ' + (type === 'error' ? 'text-red-600' : type === 'success' ? 'text-emerald-600' : 'text-slate-600');\n\t\t\t\t\t\t};\n\n\t\t\t\t\t\tconst toast = (message, type) => {\n\t\t\t\t\t\t\tdocument.body.dispatchEvent(new CustomEvent('showMessage', { detail: { message, type } }));\n\t\t\t\t\t\t};\n\n\t\t\t\t\t\tstartBtn?.addEventListener('click', async () => {\n\t\t\t\t\t\t\tsetStatus('正在生成授权链接...', 'info');\n\t\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t\tconst resp = await fetch('/manager/api/oauth/url', { credentials: 'same-origin' });\n\t\t\t\t\t\t\t\tconst data = await resp.json().catch(() => ({}));\n\t\t\t\t\t\t\t\tif (!resp.ok || !data.url) throw new Error(data.error || '获取授权链接失败');\n\n\t\t\t\t\t\t\t\twindow.open(data.url, '_blank', 'noopener');\n\t\t\t\t\t\t\t\tsetStatus('已打开授权页面：请完成授权后复制回调 URL。', 'success');\n\t\t\t\t\t\t\t\ttoast('已打开 Google 授权页面', 'success');\n\t\t\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\t\t\tsetStatus(e?.message || '获取授权链接失败', 'error');\n\t\t\t\t\t\t\t\ttoast(e?.message || '获取授权链接失败', 'error');\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t});\n\n\t\t\t\t\t\tsubmitBtn?.addEventListener('click', async () => {\n\t\t\t\t\t\t\tconst url = document.getElementById('oauthCallbackUrl')?.value?.trim();\n\t\t\t\t\t\t\tconst customProjectId = document.getElementById('oauthCustomProjectId')?.value?.trim();\n\t\t\t\t\t\t\tconst allowRandomProjectId = !!document.getElementById('oauthAllowRandomProjectId')?.checked;\n\n\t\t\t\t\t\t\tif (!url) {\n\t\t\t\t\t\t\t\tsetStatus('请先粘贴回调 URL。', 'error');\n\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t}\n\n\t\t\t\t\t\t\tsetStatus('正在解析并保存账号...', 'info');\n\t\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t\tconst resp = await fetch('/manager/api/oauth/parse-url', {\n\t\t\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\t\t\tcredentials: 'same-origin',\n\t\t\t\t\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\t\t\t\t\tbody: JSON.stringify({ url, customProjectId, allowRandomProjectId })\n\t\t\t\t\t\t\t\t});\n\t\t\t\t\t\t\t\tconst data = await resp.json().catch(() => ({}));\n\t\t\t\t\t\t\t\tif (!resp.ok || !data.success) throw new Error(data.error || '处理失败');\n\n\t\t\t\t\t\t\t\tsetStatus('OAuth 登录成功，账号已保存。', 'success');\n\t\t\t\t\t\t\t\ttoast('OAuth 登录成功，账号已保存', 'success');\n\n\t\t\t\t\t\t\t\tconst urlInput = document.getElementById('oauthCallbackUrl');\n\t\t\t\t\t\t\t\tif (urlInput) urlInput.value = '';\n\n\t\t\t\t\t\t\t\tif (window.htmx) {\n\t\t\t\t\t\t\t\t\thtmx.trigger(document.body, 'refreshList');\n\t\t\t\t\t\t\t\t\thtmx.trigger(document.body, 'refreshStats');\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\t\t\tsetStatus(e?.message || '处理失败', 'error');\n\t\t\t\t\t\t\t\ttoast(e?.message || '处理失败', 'error');\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t});\n\t\t\t\t\t})();\n\t\t\t\t</script></div><!-- Token Grid --><div><h3 class=\"text-lg font-bold text-slate-800 mb-4\">账号列表</h3><div id=\"tokenGrid\" class=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5\" hx-get=\"/manager/api/list\" hx-trigger=\"refreshList from:body\" hx-swap=\"innerHTML\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</div><!-- OAuth Login --><div class=\"bg-white rounded-2xl p-6 border border-slate-100\"><h3 class=\"text-lg font-bold text-slate-800 mb-4\">OAuth 登录（Google）</h3><!-- ... existing content ... --><div class=\"space-y-4\"><div class=\"flex flex-col md:flex-row gap-4 md:items-center\"><button type=\"button\" id=\"oauthStartBtn\" class=\"px-6 py-2.5 bg-emerald-500 text-white font-medium rounded-lg hover:bg-emerald-600 transition-colors\">发起 OAuth 登录</button><div class=\"text-xs text-slate-500\">请在新窗口完成 Google 授权，然后复制回调页面地址栏中的完整 URL</div></div><div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\"><div><label class=\"block text-sm font-medium text-slate-700 mb-1\">回调 URL（完整）</label> <input type=\"text\" id=\"oauthCallbackUrl\" class=\"w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50 transition-all text-sm\" placeholder=\"粘贴 http://localhost:.../oauth-callback?code=...&state=...\"></div><div><label class=\"block text-sm font-medium text-slate-700 mb-1\">自定义项目ID（可选）</label> <input type=\"text\" id=\"oauthCustomProjectId\" class=\"w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50 transition-all text-sm\" placeholder=\"例如 my-project-id\"></div></div><div class=\"flex items-center gap-2\"><input type=\"checkbox\" id=\"oauthAllowRandomProjectId\" class=\"h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500\"> <label for=\"oauthAllowRandomProjectId\" class=\"text-sm text-slate-700\">允许使用随机项目ID（无法自动获取时）</label></div><div class=\"flex flex-col md:flex-row gap-4 md:items-center\"><button type=\"button\" id=\"oauthSubmitBtn\" class=\"px-6 py-2.5 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 transition-colors\">提交回调URL</button><div id=\"oauthStatus\" class=\"text-sm text-slate-600\"></div></div></div><script>\n\t\t\t\t\t(() => {\n\t\t\t\t\t\tconst startBtn = document.getElementById('oauthStartBtn');\n\t\t\t\t\t\tconst submitBtn = document.getElementById('oauthSubmitBtn');\n\t\t\t\t\t\tconst statusEl = document.getElementById('oauthStatus');\n\n\t\t\t\t\t\tconst setStatus = (msg, type) => {\n\t\t\t\t\t\t\tstatusEl.textContent = msg || '';\n\t\t\t\t\t\t\tstatusEl.className = 'text-sm ' + (type === 'error' ? 'text-red-600' : type === 'success' ? 'text-emerald-600' : 'text-slate-600');\n\t\t\t\t\t\t};\n\n\t\t\t\t\t\tconst toast = (message, type) => {\n\t\t\t\t\t\t\tdocument.body.dispatchEvent(new CustomEvent('showMessage', { detail: { message, type } }));\n\t\t\t\t\t\t};\n\n\t\t\t\t\t\tstartBtn?.addEventListener('click', async () => {\n\t\t\t\t\t\t\tsetStatus('正在生成授权链接...', 'info');\n\t\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t\tconst resp = await fetch('/manager/api/oauth/url', { credentials: 'same-origin' });\n\t\t\t\t\t\t\t\tconst data = await resp.json().catch(() => ({}));\n\t\t\t\t\t\t\t\tif (!resp.ok || !data.url) throw new Error(data.error || '获取授权链接失败');\n\n\t\t\t\t\t\t\t\twindow.open(data.url, '_blank', 'noopener');\n\t\t\t\t\t\t\t\tsetStatus('已打开授权页面：请完成授权后复制回调 URL。', 'success');\n\t\t\t\t\t\t\t\ttoast('已打开 Google 授权页面', 'success');\n\t\t\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\t\t\tsetStatus(e?.message || '获取授权链接失败', 'error');\n\t\t\t\t\t\t\t\ttoast(e?.message || '获取授权链接失败', 'error');\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t});\n\n\t\t\t\t\t\tsubmitBtn?.addEventListener('click', async () => {\n\t\t\t\t\t\t\tconst url = document.getElementById('oauthCallbackUrl')?.value?.trim();\n\t\t\t\t\t\t\tconst customProjectId = document.getElementById('oauthCustomProjectId')?.value?.trim();\n\t\t\t\t\t\t\tconst allowRandomProjectId = !!document.getElementById('oauthAllowRandomProjectId')?.checked;\n\n\t\t\t\t\t\t\tif (!url) {\n\t\t\t\t\t\t\t\tsetStatus('请先粘贴回调 URL。', 'error');\n\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t}\n\n\t\t\t\t\t\t\tsetStatus('正在解析并保存账号...', 'info');\n\t\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t\tconst resp = await fetch('/manager/api/oauth/parse-url', {\n\t\t\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\t\t\tcredentials: 'same-origin',\n\t\t\t\t\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\t\t\t\t\tbody: JSON.stringify({ url, customProjectId, allowRandomProjectId })\n\t\t\t\t\t\t\t\t});\n\t\t\t\t\t\t\t\tconst data = await resp.json().catch(() => ({}));\n\t\t\t\t\t\t\t\tif (!resp.ok || !data.success) throw new Error(data.error || '处理失败');\n\n\t\t\t\t\t\t\t\tsetStatus('OAuth 登录成功，账号已保存。', 'success');\n\t\t\t\t\t\t\t\ttoast('OAuth 登录成功，账号已保存', 'success');\n\n\t\t\t\t\t\t\t\tconst urlInput = document.getElementById('oauthCallbackUrl');\n\t\t\t\t\t\t\t\tif (urlInput) urlInput.value = '';\n\n\t\t\t\t\t\t\t\tif (window.htmx) {\n\t\t\t\t\t\t\t\t\thtmx.trigger(document.body, 'refreshList');\n\t\t\t\t\t\t\t\t\thtmx.trigger(document.body, 'refreshStats');\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\t\t\tsetStatus(e?.message || '处理失败', 'error');\n\t\t\t\t\t\t\t\ttoast(e?.message || '处理失败', 'error');\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t});\n\t\t\t\t\t})();\n\t\t\t\t</script></div><!-- Token Grid --><div><div class=\"flex justify-between items-center mb-4\"><h3 class=\"text-lg font-bold text-slate-800\">账号列表</h3><button class=\"px-4 py-2 text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2\" hx-post=\"/manager/api/refresh_all\" hx-swap=\"none\" hx-indicator=\"#refresh-indicator\" hx-on::after-request=\"document.body.dispatchEvent(new CustomEvent('showMessage', { detail: { message: '所有账号信息已刷新', type: 'success' } }))\"><span id=\"refresh-indicator\" class=\"htmx-indicator animate-spin\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M21 12a9 9 0 1 1-6.219-8.56\"></path></svg></span> <span class=\"htmx-request:hidden\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"></path><path d=\"M21 3v5h-5\"></path><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"></path><path d=\"M3 21v-5h5\"></path></svg></span> 刷新全部</button></div><div id=\"tokenGrid\" class=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5\" hx-get=\"/manager/api/list\" hx-trigger=\"refreshList from:body\" hx-swap=\"innerHTML\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -63,7 +63,7 @@ func Dashboard(accounts []credential.Account, stats map[string]int) templ.Compon
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</div></div><!-- Quota Prefetch (HTMX OOB swap) --><div class=\"hidden\" hx-post=\"/manager/api/quota/all\" hx-trigger=\"load, refreshQuota from:body\" hx-swap=\"none\"></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</div></div><div class=\"hidden\" hx-post=\"/manager/api/quota/all\" hx-trigger=\"load, refreshQuota from:body\" hx-swap=\"none\"></div></div><!-- Settings View (HTMX Loaded) --><div id=\"tab-settings\" class=\"hidden\" hx-get=\"/manager/api/settings\" hx-trigger=\"settingsTabActivated from:body\" hx-swap=\"innerHTML\"><!-- Loading skeleton --><div class=\"animate-pulse space-y-6\"><div class=\"h-8 bg-slate-100 rounded w-1/4\"></div><div class=\"bg-white rounded-xl border border-slate-100 p-6 space-y-4\"><div class=\"h-4 bg-slate-100 rounded w-1/3\"></div><div class=\"h-10 bg-slate-100 rounded\"></div><div class=\"h-4 bg-slate-100 rounded w-1/3\"></div><div class=\"h-10 bg-slate-100 rounded\"></div></div></div></div></div><script>\n            function switchTab(tabName, el) {\n                // Update UI state\n                document.getElementById('tab-accounts').classList.toggle('hidden', tabName !== 'accounts');\n                document.getElementById('tab-settings').classList.toggle('hidden', tabName !== 'settings');\n                \n                // Update tab styles\n                const buttons = el.parentElement.querySelectorAll('button');\n                buttons.forEach(btn => {\n                    btn.classList.remove('border-blue-600', 'text-blue-600');\n                    btn.classList.add('border-transparent', 'text-slate-500');\n                });\n                el.classList.add('border-blue-600', 'text-blue-600');\n                el.classList.remove('border-transparent', 'text-slate-500');\n\n                // Trigger settings load when switching to settings tab\n                if (tabName === 'settings') {\n                    document.body.dispatchEvent(new CustomEvent('settingsTabActivated'));\n                }\n            }\n        </script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -98,15 +98,19 @@ func StatsCards(stats map[string]int) templ.Component {
 			templ_7745c5c3_Var3 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = StatsCard("Token 总数", stats["total"], "text-blue-600", "bg-blue-50/50 border-blue-100").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = StatsCard("TOKEN总数", stats["total"], "text-slate-900").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = StatsCard("活跃 Token", stats["active"], "text-emerald-600", "bg-emerald-50/50 border-emerald-100").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = StatsCard("活跃TOKEN", stats["active"], "text-emerald-500").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = StatsCard("失效/禁用 Token", stats["expired"], "text-red-600", "bg-red-50/50 border-red-100").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = StatsCard("失效TOKEN", stats["expired"], "text-red-500").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = StatsCard("禁用TOKEN", stats["disabled"], "text-amber-500").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -114,7 +118,7 @@ func StatsCards(stats map[string]int) templ.Component {
 	})
 }
 
-func StatsCard(label string, value int, textColor string, containerClass string) templ.Component {
+func StatsCard(label string, value int, textColor string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -135,43 +139,38 @@ func StatsCard(label string, value int, textColor string, containerClass string)
 			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		var templ_7745c5c3_Var5 = []any{"p-5 rounded-xl border flex items-center gap-5 transition-all " + containerClass}
-		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var5...)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"bg-white p-4 rounded-xl border border-slate-200 flex flex-col gap-2 transition-colors\"><span class=\"text-sm font-medium text-slate-500\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"")
+		var templ_7745c5c3_Var5 string
+		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(label)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 227, Col: 64}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var6 string
-		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var5).String())
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</span> ")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var6 = []any{"text-2xl font-bold " + textColor}
+		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var6...)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<span class=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var7 string
+		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var6).String())
 		if templ_7745c5c3_Err != nil {
 			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 1, Col: 0}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\">")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var7 = []any{"p-3 rounded-lg bg-white " + textColor}
-		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var7...)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<div class=\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var8 string
-		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var7).String())
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 1, Col: 0}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -179,71 +178,16 @@ func StatsCard(label string, value int, textColor string, containerClass string)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if label == "Token 总数" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><rect x=\"2\" y=\"7\" width=\"20\" height=\"14\" rx=\"2\" ry=\"2\"></rect><path d=\"M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16\"></path></svg>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-		} else if label == "活跃 Token" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M22 11.08V12a10 10 0 1 1-5.93-9.14\"></path><polyline points=\"22 4 12 14.01 9 11.01\"></polyline></svg>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><line x1=\"15\" y1=\"9\" x2=\"9\" y2=\"15\"></line><line x1=\"9\" y1=\"9\" x2=\"15\" y2=\"15\"></line></svg>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
+		var templ_7745c5c3_Var8 string
+		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", value))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 228, Col: 84}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</div><div class=\"flex flex-col\"><span class=\"text-sm font-medium text-slate-500 uppercase tracking-wider\">")
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var9 string
-		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(label)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 188, Col: 93}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</span> ")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var10 = []any{"text-3xl font-bold tracking-tight " + textColor}
-		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var10...)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<span class=\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var11 string
-		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var10).String())
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 1, Col: 0}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "\">")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var12 string
-		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", value))
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 189, Col: 103}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</span></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</span></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -267,9 +211,9 @@ func TokenList(accounts []credential.Account) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var13 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var13 == nil {
-			templ_7745c5c3_Var13 = templ.NopComponent
+		templ_7745c5c3_Var9 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var9 == nil {
+			templ_7745c5c3_Var9 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
 		for _, account := range accounts {
@@ -279,7 +223,7 @@ func TokenList(accounts []credential.Account) templ.Component {
 			}
 		}
 		if len(accounts) == 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<div class=\"col-span-full py-10 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200\">暂无数据</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<div class=\"col-span-full py-10 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200\">暂无数据</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -304,134 +248,134 @@ func TokenCard(account credential.Account, quotaOpen bool) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var14 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var14 == nil {
-			templ_7745c5c3_Var14 = templ.NopComponent
+		templ_7745c5c3_Var10 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var10 == nil {
+			templ_7745c5c3_Var10 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<div class=\"bg-white border boundary-slate-200 rounded-xl shadow-sm p-5 hover:shadow-md transition-all duration-200 group relative overflow-hidden\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<div class=\"bg-white border border-slate-100 rounded-xl p-5 transition-all duration-200 group relative overflow-hidden\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if !account.Enable {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<div class=\"absolute inset-0 bg-slate-50/50 z-10 pointer-events-none\"></div><div class=\"absolute top-3 right-3 z-20\"><span class=\"px-2 py-1 rounded text-xs font-medium bg-slate-200 text-slate-600\">已禁用</span></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<div class=\"absolute inset-0 bg-slate-50/50 z-10 pointer-events-none\"></div><div class=\"absolute top-3 right-3 z-20\"><span class=\"px-2 py-1 rounded text-xs font-medium bg-slate-200 text-slate-600\">已禁用</span></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else if account.IsExpired(time.Now().UnixMilli()) {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<div class=\"absolute top-3 right-3 z-20\"><span class=\"px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-600\">已失效</span></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<div class=\"absolute top-3 right-3 z-20\"><span class=\"px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-600\">已失效</span></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<div class=\"absolute top-3 right-3 z-20\"><span class=\"px-2 py-1 rounded text-xs font-medium bg-emerald-100 text-emerald-600\">活跃</span></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<div class=\"absolute top-3 right-3 z-20\"><span class=\"px-2 py-1 rounded text-xs font-medium bg-emerald-500 text-white border border-emerald-500\">活跃</span></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<div class=\"flex justify-between items-start mb-4 pr-16 relative z-10 w-full\"><div class=\"overflow-hidden w-full\"><div class=\"font-bold text-slate-800 truncate text-base\" title=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"flex justify-between items-start mb-4 pr-16 relative z-10 w-full\"><div class=\"overflow-hidden w-full\"><div class=\"font-bold text-slate-800 truncate text-base\" title=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var11 string
+		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(account.Email)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 262, Col: 94}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if account.Email != "" {
+			var templ_7745c5c3_Var12 string
+			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(account.Email)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 264, Col: 39}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		} else if account.ProjectID != "" {
+			var templ_7745c5c3_Var13 string
+			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(account.ProjectID)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 266, Col: 43}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		} else {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "未命名账号")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</div></div></div><div class=\"space-y-3 relative z-10\"><div class=\"flex gap-2 mt-4 border-t border-slate-50 pt-3\"><button class=\"flex-1 py-1.5 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded transition-colors\" hx-post=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var14 string
+		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/manager/api/refresh?id=%s", account.SessionID))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 277, Col: 94}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\" hx-vals=\"js:{quotaOpen: this.closest('.group').querySelector('details[data-quota-details]')?.open ? 1 : 0}\" hx-target=\"closest .group\" hx-swap=\"outerHTML\" hx-on::after-request=\"document.body.dispatchEvent(new CustomEvent('showMessage', { detail: { message: '账号信息已刷新', type: 'success' } }))\">刷新</button> <button class=\"flex-1 py-1.5 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded transition-colors\" hx-post=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var15 string
-		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(account.Email)
+		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/manager/api/toggle?id=%s", account.SessionID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 224, Col: 94}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 285, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "\">")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		if account.Email != "" {
-			var templ_7745c5c3_Var16 string
-			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(account.Email)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 226, Col: 39}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-		} else if account.ProjectID != "" {
-			var templ_7745c5c3_Var17 string
-			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(account.ProjectID)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 228, Col: 43}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "未命名账号")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</div></div></div><div class=\"space-y-3 relative z-10\"><div class=\"flex gap-2 mt-4 border-t border-slate-50 pt-3\"><button class=\"flex-1 py-1.5 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded transition-colors\" hx-post=\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var18 string
-		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/manager/api/refresh?id=%s", account.SessionID))
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 239, Col: 94}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "\" hx-vals=\"js:{quotaOpen: this.closest('.group').querySelector('details[data-quota-details]')?.open ? 1 : 0}\" hx-target=\"closest .group\" hx-swap=\"outerHTML\" hx-on::after-request=\"document.body.dispatchEvent(new CustomEvent('showMessage', { detail: { message: '账号信息已刷新', type: 'success' } }))\">刷新</button> <button class=\"flex-1 py-1.5 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded transition-colors\" hx-post=\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var19 string
-		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/manager/api/toggle?id=%s", account.SessionID))
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 247, Col: 93}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "\" hx-target=\"closest .group\" hx-swap=\"outerHTML\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\" hx-target=\"closest .group\" hx-swap=\"outerHTML\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if account.Enable {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "禁用")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "禁用")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "启用")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "启用")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</button> <button class=\"flex-none px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 rounded transition-colors\" hx-post=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</button> <button class=\"flex-none px-3 py-1.5 text-xs font-medium text-white bg-[#f05252] hover:bg-red-600 border border-[#f05252] rounded transition-colors\" hx-post=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var20 string
-		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/manager/api/delete?id=%s", account.SessionID))
+		var templ_7745c5c3_Var16 string
+		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/manager/api/delete?id=%s", account.SessionID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 257, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 295, Col: 93}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "\" hx-confirm=\"确认删除此账号?\" hx-target=\"closest .group\" hx-swap=\"outerHTML\">删除</button></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "\" hx-confirm=\"确认删除此账号?\" hx-target=\"closest .group\" hx-swap=\"outerHTML\">删除</button></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if quotaOpen {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<details class=\"mt-3 border-t border-slate-50 pt-3 group\" data-quota-details=\"1\" open>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<details class=\"mt-3 border-t border-slate-50 pt-3 group\" data-quota-details=\"1\" open>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -439,12 +383,12 @@ func TokenCard(account credential.Account, quotaOpen bool) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</details>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</details>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "<details class=\"mt-3 border-t border-slate-50 pt-3 group\" data-quota-details=\"1\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<details class=\"mt-3 border-t border-slate-50 pt-3 group\" data-quota-details=\"1\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -452,12 +396,12 @@ func TokenCard(account credential.Account, quotaOpen bool) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "</details>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</details>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "</div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -481,25 +425,25 @@ func QuotaPanel(account credential.Account) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var21 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var21 == nil {
-			templ_7745c5c3_Var21 = templ.NopComponent
+		templ_7745c5c3_Var17 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var17 == nil {
+			templ_7745c5c3_Var17 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<summary class=\"list-none flex w-full items-center justify-between cursor-pointer select-none text-xs text-slate-600\"><span class=\"font-medium\">模型配额</span> <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" class=\"text-slate-400 transition-transform duration-200 rotate-90 group-open:rotate-0\"><path d=\"m6 9 6 6 6-6\"></path></svg></summary><div class=\"mt-3 max-h-0 overflow-hidden transition-all duration-300 ease-in-out group-open:max-h-[520px]\"><div id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<summary class=\"list-none flex w-full items-center justify-between cursor-pointer select-none text-xs text-slate-600\"><span class=\"font-medium\">模型配额</span> <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" class=\"text-slate-400 transition-transform duration-200 rotate-90 group-open:rotate-0\"><path d=\"m6 9 6 6 6-6\"></path></svg></summary><div class=\"mt-3 max-h-0 overflow-hidden transition-all duration-300 ease-in-out group-open:max-h-[520px]\"><div id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var22 string
-		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs("quota-" + account.SessionID)
+		var templ_7745c5c3_Var18 string
+		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs("quota-" + account.SessionID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 284, Col: 40}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 322, Col: 40}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -507,7 +451,7 @@ func QuotaPanel(account credential.Account) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "</div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "</div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
