@@ -17,6 +17,16 @@ templ Layout(title string) {
             .htmx-request.htmx-indicator { opacity: 1 }
 			summary::-webkit-details-marker { display: none; }
 			summary::marker { content: ""; }
+			@keyframes quotaPop {
+				0% { transform: scale(0.96); opacity: 0.75; }
+				100% { transform: scale(1); opacity: 1; }
+			}
+			@keyframes quotaBarPop {
+				0% { transform: scaleY(0.6); opacity: 0.7; }
+				100% { transform: scaleY(1); opacity: 1; }
+			}
+			.quota-pop { animation: quotaPop 260ms ease-out; }
+			.quota-bar-pop { animation: quotaBarPop 320ms ease-out; transform-origin: center; }
 		</style>
 	</head>
 	<body class="bg-slate-50 text-slate-900 min-h-screen pt-20 pb-10">

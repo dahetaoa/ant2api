@@ -43,35 +43,59 @@ func HandleMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	acc, err := credential.GetStore().GetToken()
-	if err != nil {
-		httppkg.WriteClaudeError(w, http.StatusServiceUnavailable, err.Error())
-		return
-	}
-	if acc.ProjectID == "" {
-		acc.ProjectID = id.ProjectID()
-	}
-
-	acct := &gwcommon.AccountContext{ProjectID: acc.ProjectID, SessionID: acc.SessionID, AccessToken: acc.AccessToken}
-	vreq, requestID, err := ToVertexRequest(&req, acct)
+	placeholder := &gwcommon.AccountContext{ProjectID: id.ProjectID(), SessionID: id.SessionID()}
+	vreq, requestID, err := ToVertexRequest(&req, placeholder)
 	if err != nil {
 		httppkg.WriteClaudeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	inputTokens := estimateTokens(body)
+	store := credential.GetStore()
+	attempts := store.EnabledCount()
+	if attempts < 1 {
+		attempts = 1
+	}
 	if req.Stream {
-		handleStream(w, r, &req, vreq, requestID, inputTokens, acct)
+		handleStreamWithRetry(w, r, &req, vreq, requestID, inputTokens, store, attempts)
 		return
 	}
 
 	startTime := time.Now()
-	vresp, err := vertex.GenerateContent(r.Context(), vreq, acc.AccessToken)
-	if err != nil {
-		if logger.IsClientLogEnabled() {
-			logger.ClientResponse(gwcommon.StatusFromVertexError(err), time.Since(startTime), err.Error())
+	var vresp *vertex.Response
+	var lastErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		acc, err := store.GetToken()
+		if err != nil {
+			lastErr = err
+			break
 		}
-		httppkg.WriteClaudeError(w, gwcommon.StatusFromVertexError(err), err.Error())
+		projectID := acc.ProjectID
+		if projectID == "" {
+			projectID = id.ProjectID()
+		}
+		vreq.Project = projectID
+		vreq.Request.SessionID = acc.SessionID
+
+		vresp, err = vertex.GenerateContent(r.Context(), vreq, acc.AccessToken)
+		if err == nil {
+			lastErr = nil
+			break
+		}
+		lastErr = err
+		if !gwcommon.ShouldRetryWithNextToken(err) {
+			break
+		}
+	}
+	if lastErr != nil || vresp == nil {
+		status := gwcommon.StatusFromVertexError(lastErr)
+		if _, ok := lastErr.(*vertex.APIError); !ok {
+			status = http.StatusServiceUnavailable
+		}
+		if logger.IsClientLogEnabled() {
+			logger.ClientResponse(status, time.Since(startTime), lastErr.Error())
+		}
+		httppkg.WriteClaudeError(w, status, lastErr.Error())
 		return
 	}
 
@@ -87,24 +111,43 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 		logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, nil)
 	}
 	startTime := time.Now()
-	acc, err := credential.GetStore().GetToken()
-	if err != nil {
-		if logger.IsClientLogEnabled() {
-			logger.ClientResponse(http.StatusServiceUnavailable, time.Since(startTime), err.Error())
-		}
-		httppkg.WriteClaudeError(w, http.StatusServiceUnavailable, err.Error())
-		return
-	}
-	if acc.ProjectID == "" {
-		acc.ProjectID = id.ProjectID()
+	store := credential.GetStore()
+	attempts := store.EnabledCount()
+	if attempts < 1 {
+		attempts = 1
 	}
 
-	vm, err := vertex.FetchAvailableModels(r.Context(), acc.ProjectID, acc.AccessToken)
-	if err != nil {
-		if logger.IsClientLogEnabled() {
-			logger.ClientResponse(gwcommon.StatusFromVertexError(err), time.Since(startTime), err.Error())
+	var vm *vertex.AvailableModelsResponse
+	var lastErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		acc, err := store.GetToken()
+		if err != nil {
+			lastErr = err
+			break
 		}
-		httppkg.WriteClaudeError(w, gwcommon.StatusFromVertexError(err), err.Error())
+		projectID := acc.ProjectID
+		if projectID == "" {
+			projectID = id.ProjectID()
+		}
+		vm, err = vertex.FetchAvailableModels(r.Context(), projectID, acc.AccessToken)
+		if err == nil {
+			lastErr = nil
+			break
+		}
+		lastErr = err
+		if !gwcommon.ShouldRetryWithNextToken(err) {
+			break
+		}
+	}
+	if lastErr != nil || vm == nil {
+		status := gwcommon.StatusFromVertexError(lastErr)
+		if _, ok := lastErr.(*vertex.APIError); !ok {
+			status = http.StatusServiceUnavailable
+		}
+		if logger.IsClientLogEnabled() {
+			logger.ClientResponse(status, time.Since(startTime), lastErr.Error())
+		}
+		httppkg.WriteClaudeError(w, status, lastErr.Error())
 		return
 	}
 
@@ -147,9 +190,31 @@ func HandleCountTokens(w http.ResponseWriter, r *http.Request) {
 	httppkg.WriteJSON(w, http.StatusOK, out)
 }
 
-func handleStream(w http.ResponseWriter, r *http.Request, req *MessagesRequest, vreq *vertex.Request, requestID string, inputTokens int, acct *gwcommon.AccountContext) {
+func handleStreamWithRetry(w http.ResponseWriter, r *http.Request, req *MessagesRequest, vreq *vertex.Request, requestID string, inputTokens int, store *credential.Store, attempts int) {
 	startTime := time.Now()
-	resp, err := vertex.GenerateContentStream(r.Context(), vreq, acct.AccessToken)
+	var resp *http.Response
+	var err error
+	for attempt := 0; attempt < attempts; attempt++ {
+		acc, accErr := store.GetToken()
+		if accErr != nil {
+			err = accErr
+			break
+		}
+		projectID := acc.ProjectID
+		if projectID == "" {
+			projectID = id.ProjectID()
+		}
+		vreq.Project = projectID
+		vreq.Request.SessionID = acc.SessionID
+
+		resp, err = vertex.GenerateContentStream(r.Context(), vreq, acc.AccessToken)
+		if err == nil {
+			break
+		}
+		if !gwcommon.ShouldRetryWithNextToken(err) {
+			break
+		}
+	}
 	if err != nil {
 		httppkg.SetSSEHeaders(w)
 		_ = writeSSEError(w, err.Error())

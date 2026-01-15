@@ -2,8 +2,8 @@ package manager
 
 import (
 	"context"
-	"errors"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -207,13 +207,14 @@ func HandleToggle(w http.ResponseWriter, r *http.Request) {
 		updatedAccounts := store.GetAll()
 		if idx < len(updatedAccounts) { // Safety check
 			w.Header().Set("HX-Trigger", "refreshQuota")
-			views.TokenCard(updatedAccounts[idx]).Render(r.Context(), w)
+			views.TokenCard(updatedAccounts[idx], false).Render(r.Context(), w)
 		}
 	}
 }
 
 func HandleRefresh(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
+	quotaOpen := strings.TrimSpace(r.FormValue("quotaOpen")) == "1"
 	idx := findIndexBySessionID(id)
 	if idx != -1 {
 		store := credential.GetStore()
@@ -227,7 +228,7 @@ func HandleRefresh(w http.ResponseWriter, r *http.Request) {
 		if idx < len(updatedAccounts) {
 			InvalidateQuotaCache(id)
 			w.Header().Set("HX-Trigger", "refreshQuota")
-			views.TokenCard(updatedAccounts[idx]).Render(r.Context(), w)
+			views.TokenCard(updatedAccounts[idx], quotaOpen).Render(r.Context(), w)
 		}
 	}
 }
@@ -241,11 +242,11 @@ func HandleRefreshAll(w http.ResponseWriter, r *http.Request) {
 }
 
 type quotaAPIResponse struct {
-	SessionID string            `json:"sessionId"`
-	Groups    []QuotaGroup      `json:"groups,omitempty"`
-	Error     string            `json:"error,omitempty"`
-	Cached    bool              `json:"cached,omitempty"`
-	FetchedAt *time.Time        `json:"fetchedAt,omitempty"`
+	SessionID string       `json:"sessionId"`
+	Groups    []QuotaGroup `json:"groups,omitempty"`
+	Error     string       `json:"error,omitempty"`
+	Cached    bool         `json:"cached,omitempty"`
+	FetchedAt *time.Time   `json:"fetchedAt,omitempty"`
 }
 
 func HandleQuota(w http.ResponseWriter, r *http.Request) {

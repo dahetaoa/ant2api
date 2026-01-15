@@ -11,10 +11,10 @@ import (
 )
 
 const (
-	quotaCacheTTL        = 2 * time.Minute
-	quotaErrorCacheTTL   = 30 * time.Second
-	quotaFetchTimeout    = 20 * time.Second
-	quotaMaxConcurrency  = 4
+	quotaCacheTTL       = 2 * time.Minute
+	quotaErrorCacheTTL  = 30 * time.Second
+	quotaFetchTimeout   = 20 * time.Second
+	quotaMaxConcurrency = 4
 )
 
 type quotaCacheEntry struct {

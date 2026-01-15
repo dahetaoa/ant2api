@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"anti2api-golang/refactor/internal/credential"
+	gwcommon "anti2api-golang/refactor/internal/gateway/common"
 	"anti2api-golang/refactor/internal/logger"
 	httppkg "anti2api-golang/refactor/internal/pkg/http"
 	"anti2api-golang/refactor/internal/pkg/id"
@@ -216,28 +217,43 @@ func HandleListModels(w http.ResponseWriter, r *http.Request) {
 		logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, nil)
 	}
 	startTime := time.Now()
-	acc, err := credential.GetStore().GetToken()
-	if err != nil {
-		if logger.IsClientLogEnabled() {
-			logger.ClientResponse(http.StatusServiceUnavailable, time.Since(startTime), err.Error())
-		}
-		httppkg.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": map[string]any{"message": err.Error()}})
-		return
-	}
-	if acc.ProjectID == "" {
-		acc.ProjectID = id.ProjectID()
+	store := credential.GetStore()
+	attempts := store.EnabledCount()
+	if attempts < 1 {
+		attempts = 1
 	}
 
-	vm, err := vertex.FetchAvailableModels(r.Context(), acc.ProjectID, acc.AccessToken)
-	if err != nil {
-		status := http.StatusInternalServerError
-		if apiErr, ok := err.(*vertex.APIError); ok {
-			status = apiErr.Status
+	var vm *vertex.AvailableModelsResponse
+	var lastErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		acc, err := store.GetToken()
+		if err != nil {
+			lastErr = err
+			break
+		}
+		projectID := acc.ProjectID
+		if projectID == "" {
+			projectID = id.ProjectID()
+		}
+		vm, err = vertex.FetchAvailableModels(r.Context(), projectID, acc.AccessToken)
+		if err == nil {
+			lastErr = nil
+			break
+		}
+		lastErr = err
+		if !gwcommon.ShouldRetryWithNextToken(err) {
+			break
+		}
+	}
+	if lastErr != nil || vm == nil {
+		status := gwcommon.StatusFromVertexError(lastErr)
+		if _, ok := lastErr.(*vertex.APIError); !ok {
+			status = http.StatusServiceUnavailable
 		}
 		if logger.IsClientLogEnabled() {
-			logger.ClientResponse(status, time.Since(startTime), err.Error())
+			logger.ClientResponse(status, time.Since(startTime), lastErr.Error())
 		}
-		httppkg.WriteJSON(w, status, map[string]any{"error": map[string]any{"message": err.Error()}})
+		httppkg.WriteJSON(w, status, map[string]any{"error": map[string]any{"message": lastErr.Error()}})
 		return
 	}
 	ids := modelutil.BuildSortedModelIDs(vm.Models)
@@ -309,18 +325,15 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	acc, err := credential.GetStore().GetToken()
-	if err != nil {
-		httppkg.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": map[string]any{"message": err.Error()}})
-		return
-	}
-	if acc.ProjectID == "" {
-		acc.ProjectID = id.ProjectID()
+	store := credential.GetStore()
+	attempts := store.EnabledCount()
+	if attempts < 1 {
+		attempts = 1
 	}
 
 	backendModel := modelutil.BackendModelID(model)
 	vreq := &vertex.Request{
-		Project:   acc.ProjectID,
+		Project:   id.ProjectID(),
 		Model:     backendModel,
 		RequestID: id.RequestID(),
 		Request: vertex.InnerReq{
@@ -329,12 +342,14 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 			GenerationConfig:  toVertexGenerationConfig(model, req.GenerationConfig),
 			Tools:             req.Tools,
 			ToolConfig:        req.ToolConfig,
-			SessionID:         acc.SessionID,
+			SessionID:         id.SessionID(),
 		},
 	}
 	vreq.RequestType = "agent"
 	vreq.UserAgent = "antigravity"
+	overrideSessionID := false
 	if sid := strings.TrimSpace(r.Header.Get("X-Session-ID")); sid != "" {
+		overrideSessionID = true
 		vreq.Request.SessionID = sid
 	}
 	if rid := strings.TrimSpace(r.Header.Get("X-Request-ID")); rid != "" {
@@ -351,16 +366,42 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	startTime := time.Now()
-	resp, err := vertex.GenerateContent(r.Context(), vreq, acc.AccessToken)
-	if err != nil {
-		status := http.StatusInternalServerError
-		if apiErr, ok := err.(*vertex.APIError); ok {
-			status = apiErr.Status
+	var resp *vertex.Response
+	var lastErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		acc, err := store.GetToken()
+		if err != nil {
+			lastErr = err
+			break
+		}
+		projectID := acc.ProjectID
+		if projectID == "" {
+			projectID = id.ProjectID()
+		}
+		vreq.Project = projectID
+		if !overrideSessionID {
+			vreq.Request.SessionID = acc.SessionID
+		}
+
+		resp, err = vertex.GenerateContent(r.Context(), vreq, acc.AccessToken)
+		if err == nil {
+			lastErr = nil
+			break
+		}
+		lastErr = err
+		if !gwcommon.ShouldRetryWithNextToken(err) {
+			break
+		}
+	}
+	if lastErr != nil || resp == nil {
+		status := gwcommon.StatusFromVertexError(lastErr)
+		if _, ok := lastErr.(*vertex.APIError); !ok {
+			status = http.StatusServiceUnavailable
 		}
 		if logger.IsClientLogEnabled() {
-			logger.ClientResponse(status, time.Since(startTime), err.Error())
+			logger.ClientResponse(status, time.Since(startTime), lastErr.Error())
 		}
-		httppkg.WriteJSON(w, status, map[string]any{"error": map[string]any{"message": err.Error()}})
+		httppkg.WriteJSON(w, status, map[string]any{"error": map[string]any{"message": lastErr.Error()}})
 		return
 	}
 
@@ -395,19 +436,15 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	acc, err := credential.GetStore().GetToken()
-	if err != nil {
-		vertex.SetStreamHeaders(w)
-		vertex.WriteStreamError(w, err.Error())
-		return
-	}
-	if acc.ProjectID == "" {
-		acc.ProjectID = id.ProjectID()
+	store := credential.GetStore()
+	attempts := store.EnabledCount()
+	if attempts < 1 {
+		attempts = 1
 	}
 
 	backendModel := modelutil.BackendModelID(model)
 	vreq := &vertex.Request{
-		Project:   acc.ProjectID,
+		Project:   id.ProjectID(),
 		Model:     backendModel,
 		RequestID: id.RequestID(),
 		Request: vertex.InnerReq{
@@ -416,12 +453,14 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 			GenerationConfig:  toVertexGenerationConfig(model, req.GenerationConfig),
 			Tools:             req.Tools,
 			ToolConfig:        req.ToolConfig,
-			SessionID:         acc.SessionID,
+			SessionID:         id.SessionID(),
 		},
 	}
 	vreq.RequestType = "agent"
 	vreq.UserAgent = "antigravity"
+	overrideSessionID := false
 	if sid := strings.TrimSpace(r.Header.Get("X-Session-ID")); sid != "" {
+		overrideSessionID = true
 		vreq.Request.SessionID = sid
 	}
 	if rid := strings.TrimSpace(r.Header.Get("X-Request-ID")); rid != "" {
@@ -438,10 +477,36 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	startTime := time.Now()
-	resp, err := vertex.GenerateContentStream(r.Context(), vreq, acc.AccessToken)
-	if err != nil {
+	var resp *http.Response
+	var lastErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		acc, err := store.GetToken()
+		if err != nil {
+			lastErr = err
+			break
+		}
+		projectID := acc.ProjectID
+		if projectID == "" {
+			projectID = id.ProjectID()
+		}
+		vreq.Project = projectID
+		if !overrideSessionID {
+			vreq.Request.SessionID = acc.SessionID
+		}
+
+		resp, err = vertex.GenerateContentStream(r.Context(), vreq, acc.AccessToken)
+		if err == nil {
+			lastErr = nil
+			break
+		}
+		lastErr = err
+		if !gwcommon.ShouldRetryWithNextToken(err) {
+			break
+		}
+	}
+	if lastErr != nil || resp == nil {
 		vertex.SetStreamHeaders(w)
-		vertex.WriteStreamError(w, err.Error())
+		vertex.WriteStreamError(w, lastErr.Error())
 		return
 	}
 	defer resp.Body.Close()
