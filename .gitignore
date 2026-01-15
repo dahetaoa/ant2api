@@ -9,5 +9,11 @@ server.exe
 main
 main.exe
 
+# Templ generated files
+*_templ.go
+
+# Build cache
+.build_hash
+
 # Logs
 *.log
