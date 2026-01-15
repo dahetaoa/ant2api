@@ -48,6 +48,15 @@ func BuildAuthURL(redirectURI, state string) string {
 }
 
 func ExchangeCodeForToken(code, redirectURI string) (*TokenResponse, error) {
+	code = strings.TrimSpace(code)
+	redirectURI = strings.TrimSpace(redirectURI)
+	if code == "" {
+		return nil, errors.New("回调 URL 中缺少 code 参数")
+	}
+	if redirectURI == "" {
+		return nil, errors.New("缺少 redirect_uri")
+	}
+
 	data := url.Values{
 		"code":          {code},
 		"client_id":     {config.ClientID()},
@@ -56,18 +65,29 @@ func ExchangeCodeForToken(code, redirectURI string) (*TokenResponse, error) {
 		"grant_type":    {"authorization_code"},
 	}
 
-	resp, err := http.PostForm("https://oauth2.googleapis.com/token", data)
+	req, err := http.NewRequest(http.MethodPost, "https://oauth2.googleapis.com/token", strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := config.Get()
+	req.Host = "oauth2.googleapis.com"
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := getOAuthHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("token exchange failed: " + string(body))
+		logger.Warn("OAuth 交换 token 失败（HTTP %d）：%s", resp.StatusCode, string(body))
+		return nil, errors.New("交换 Token 失败：请确认授权码未过期，且 redirect_uri 与发起授权时一致")
 	}
 
 	var tokenResp TokenResponse
@@ -80,7 +100,7 @@ func ExchangeCodeForToken(code, redirectURI string) (*TokenResponse, error) {
 
 func RefreshToken(account *Account) error {
 	if account.RefreshToken == "" {
-		return errors.New("no refresh token")
+		return errors.New("缺少 refresh_token")
 	}
 
 	data := url.Values{
@@ -90,18 +110,29 @@ func RefreshToken(account *Account) error {
 		"refresh_token": {account.RefreshToken},
 	}
 
-	resp, err := http.PostForm("https://oauth2.googleapis.com/token", data)
+	req, err := http.NewRequest(http.MethodPost, "https://oauth2.googleapis.com/token", strings.NewReader(data.Encode()))
+	if err != nil {
+		return err
+	}
+
+	cfg := config.Get()
+	req.Host = "oauth2.googleapis.com"
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := getOAuthHTTPClient().Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("token refresh failed")
+		logger.Warn("OAuth 刷新 token 失败（HTTP %d）：%s", resp.StatusCode, string(body))
+		return errors.New("刷新 Token 失败")
 	}
 
 	var tokenResp TokenResponse
@@ -116,31 +147,38 @@ func RefreshToken(account *Account) error {
 		account.RefreshToken = tokenResp.RefreshToken
 	}
 
-	logger.Info("Token refreshed for %s", account.Email)
+	logger.Info("已刷新 Token：%s", account.Email)
 
 	return nil
 }
 
 func GetUserInfo(accessToken string) (*UserInfo, error) {
+	accessToken = strings.TrimSpace(accessToken)
+	if accessToken == "" {
+		return nil, errors.New("缺少 access_token")
+	}
+
 	req, err := http.NewRequest(http.MethodGet, "https://www.googleapis.com/oauth2/v2/userinfo", nil)
 	if err != nil {
 		return nil, err
 	}
+	req.Host = "www.googleapis.com"
 	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("User-Agent", config.Get().UserAgent)
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := getOAuthHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("failed to get user info")
+		logger.Warn("获取用户信息失败（HTTP %d）：%s", resp.StatusCode, string(body))
+		return nil, errors.New("获取用户信息失败")
 	}
 
 	var userInfo UserInfo
@@ -160,7 +198,7 @@ func ParseOAuthURL(oauthURL string) (code, state string, err error) {
 	code = query.Get("code")
 	state = query.Get("state")
 	if code == "" {
-		return "", "", errors.New("no code in URL")
+		return "", "", errors.New("回调 URL 中缺少 code 参数")
 	}
 	return code, state, nil
 }

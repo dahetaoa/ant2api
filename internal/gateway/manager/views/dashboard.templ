@@ -35,27 +35,124 @@ templ Dashboard(accounts []credential.Account, stats map[string]int) {
 					</div>
 				</div>
 				
-				<div class="grid grid-cols-1 md:grid-cols-3 gap-4" hx-get="/manager/api/stats" hx-trigger="every 10s" hx-swap="innerHTML">
+				<div class="grid grid-cols-1 md:grid-cols-3 gap-4" hx-get="/manager/api/stats" hx-trigger="every 10s, refreshStats from:body" hx-swap="innerHTML">
 				    @StatsCards(stats)
 				</div>
 			</div>
 
-			<!-- Token Management -->
+				<!-- OAuth Login -->
 			<div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-                 <h3 class="text-lg font-bold text-slate-800 mb-4">添加 Token</h3>
-                 <form hx-post="/manager/api/add" hx-target="#tokenGrid" hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful) this.reset()">
-                    <div class="flex gap-4">
-                        <input type="text" name="token" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50 transition-all text-sm" placeholder="输入 SSO Token (ey...) 或 Json 配置"/>
-                        <button type="submit" class="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200">添加</button>
-                    </div>
-                    <div class="mt-2 text-xs text-slate-400">支持直接粘贴 sso=... 格式或 JSON 格式的单个/多个账号配置</div>
-                 </form>
-            </div>
+				<h3 class="text-lg font-bold text-slate-800 mb-4">OAuth 登录（Google）</h3>
+
+				<div class="space-y-4">
+					<div class="flex flex-col md:flex-row gap-4 md:items-center">
+						<button type="button" id="oauthStartBtn" class="px-6 py-2.5 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors shadow-sm shadow-emerald-200">
+							发起 OAuth 登录
+						</button>
+						<div class="text-xs text-slate-500">
+							请在新窗口完成 Google 授权，然后复制回调页面地址栏中的完整 URL
+						</div>
+					</div>
+
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+						<div>
+							<label class="block text-sm font-medium text-slate-700 mb-1">回调 URL（完整）</label>
+							<input type="text" id="oauthCallbackUrl" class="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50 transition-all text-sm" placeholder="粘贴 http://localhost:.../oauth-callback?code=...&state=..."/>
+						</div>
+						<div>
+							<label class="block text-sm font-medium text-slate-700 mb-1">自定义项目ID（可选）</label>
+							<input type="text" id="oauthCustomProjectId" class="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50 transition-all text-sm" placeholder="例如 my-project-id"/>
+						</div>
+					</div>
+
+					<div class="flex items-center gap-2">
+						<input type="checkbox" id="oauthAllowRandomProjectId" class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"/>
+						<label for="oauthAllowRandomProjectId" class="text-sm text-slate-700">允许使用随机项目ID（无法自动获取时）</label>
+					</div>
+
+					<div class="flex flex-col md:flex-row gap-4 md:items-center">
+						<button type="button" id="oauthSubmitBtn" class="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200">
+							提交回调URL
+						</button>
+						<div id="oauthStatus" class="text-sm text-slate-600"></div>
+					</div>
+				</div>
+
+				<script>
+					(() => {
+						const startBtn = document.getElementById('oauthStartBtn');
+						const submitBtn = document.getElementById('oauthSubmitBtn');
+						const statusEl = document.getElementById('oauthStatus');
+
+						const setStatus = (msg, type) => {
+							statusEl.textContent = msg || '';
+							statusEl.className = 'text-sm ' + (type === 'error' ? 'text-red-600' : type === 'success' ? 'text-emerald-600' : 'text-slate-600');
+						};
+
+						const toast = (message, type) => {
+							document.body.dispatchEvent(new CustomEvent('showMessage', { detail: { message, type } }));
+						};
+
+						startBtn?.addEventListener('click', async () => {
+							setStatus('正在生成授权链接...', 'info');
+							try {
+								const resp = await fetch('/manager/api/oauth/url', { credentials: 'same-origin' });
+								const data = await resp.json().catch(() => ({}));
+								if (!resp.ok || !data.url) throw new Error(data.error || '获取授权链接失败');
+
+								window.open(data.url, '_blank', 'noopener');
+								setStatus('已打开授权页面：请完成授权后复制回调 URL。', 'success');
+								toast('已打开 Google 授权页面', 'success');
+							} catch (e) {
+								setStatus(e?.message || '获取授权链接失败', 'error');
+								toast(e?.message || '获取授权链接失败', 'error');
+							}
+						});
+
+						submitBtn?.addEventListener('click', async () => {
+							const url = document.getElementById('oauthCallbackUrl')?.value?.trim();
+							const customProjectId = document.getElementById('oauthCustomProjectId')?.value?.trim();
+							const allowRandomProjectId = !!document.getElementById('oauthAllowRandomProjectId')?.checked;
+
+							if (!url) {
+								setStatus('请先粘贴回调 URL。', 'error');
+								return;
+							}
+
+							setStatus('正在解析并保存账号...', 'info');
+							try {
+								const resp = await fetch('/manager/api/oauth/parse-url', {
+									method: 'POST',
+									credentials: 'same-origin',
+									headers: { 'Content-Type': 'application/json' },
+									body: JSON.stringify({ url, customProjectId, allowRandomProjectId })
+								});
+								const data = await resp.json().catch(() => ({}));
+								if (!resp.ok || !data.success) throw new Error(data.error || '处理失败');
+
+								setStatus('OAuth 登录成功，账号已保存。', 'success');
+								toast('OAuth 登录成功，账号已保存', 'success');
+
+								const urlInput = document.getElementById('oauthCallbackUrl');
+								if (urlInput) urlInput.value = '';
+
+								if (window.htmx) {
+									htmx.trigger(document.body, 'refreshList');
+									htmx.trigger(document.body, 'refreshStats');
+								}
+							} catch (e) {
+								setStatus(e?.message || '处理失败', 'error');
+								toast(e?.message || '处理失败', 'error');
+							}
+						});
+					})();
+				</script>
+			</div>
 
 			<!-- Token Grid -->
             <div>
                 <h3 class="text-lg font-bold text-slate-800 mb-4">账号列表</h3>
-			    <div id="tokenGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+			    <div id="tokenGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" hx-get="/manager/api/list" hx-trigger="refreshList from:body" hx-swap="innerHTML">
 				    @TokenList(accounts)
 			    </div>
             </div>

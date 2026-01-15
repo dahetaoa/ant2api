@@ -47,7 +47,7 @@ func Dashboard(accounts []credential.Account, stats map[string]int) templ.Compon
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"fixed top-0 left-0 right-0 z-50 bg-white shadow py-3 px-6\"><div class=\"max-w-7xl mx-auto flex items-center justify-center\"><div class=\"font-bold text-xl tracking-tight text-slate-900\">Antigravity 2 API 管理面板</div></div></div><div class=\"max-w-7xl mx-auto px-6 space-y-8 mt-4\"><!-- Overview Section --><div class=\"bg-white rounded-2xl p-6 shadow-sm border border-slate-100\"><div class=\"flex justify-between items-center mb-6\"><h2 class=\"text-lg font-bold text-slate-800\">概览</h2><div class=\"flex gap-3\"><button class=\"px-4 py-2 text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2\" hx-post=\"/manager/api/refresh_all\" hx-swap=\"none\" hx-indicator=\"#refresh-indicator\"><span id=\"refresh-indicator\" class=\"htmx-indicator animate-spin\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M21 12a9 9 0 1 1-6.219-8.56\"></path></svg></span> <span class=\"htmx-request:hidden\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"></path><path d=\"M21 3v5h-5\"></path><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"></path><path d=\"M3 21v-5h5\"></path></svg></span> 刷新全部</button></div></div><div class=\"grid grid-cols-1 md:grid-cols-3 gap-4\" hx-get=\"/manager/api/stats\" hx-trigger=\"every 10s\" hx-swap=\"innerHTML\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"fixed top-0 left-0 right-0 z-50 bg-white shadow py-3 px-6\"><div class=\"max-w-7xl mx-auto flex items-center justify-center\"><div class=\"font-bold text-xl tracking-tight text-slate-900\">Antigravity 2 API 管理面板</div></div></div><div class=\"max-w-7xl mx-auto px-6 space-y-8 mt-4\"><!-- Overview Section --><div class=\"bg-white rounded-2xl p-6 shadow-sm border border-slate-100\"><div class=\"flex justify-between items-center mb-6\"><h2 class=\"text-lg font-bold text-slate-800\">概览</h2><div class=\"flex gap-3\"><button class=\"px-4 py-2 text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2\" hx-post=\"/manager/api/refresh_all\" hx-swap=\"none\" hx-indicator=\"#refresh-indicator\"><span id=\"refresh-indicator\" class=\"htmx-indicator animate-spin\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M21 12a9 9 0 1 1-6.219-8.56\"></path></svg></span> <span class=\"htmx-request:hidden\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"></path><path d=\"M21 3v5h-5\"></path><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"></path><path d=\"M3 21v-5h5\"></path></svg></span> 刷新全部</button></div></div><div class=\"grid grid-cols-1 md:grid-cols-3 gap-4\" hx-get=\"/manager/api/stats\" hx-trigger=\"every 10s, refreshStats from:body\" hx-swap=\"innerHTML\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -55,7 +55,7 @@ func Dashboard(accounts []credential.Account, stats map[string]int) templ.Compon
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</div></div><!-- Token Management --><div class=\"bg-white rounded-2xl p-6 shadow-sm border border-slate-100\"><h3 class=\"text-lg font-bold text-slate-800 mb-4\">添加 Token</h3><form hx-post=\"/manager/api/add\" hx-target=\"#tokenGrid\" hx-swap=\"innerHTML\" hx-on::after-request=\"if(event.detail.successful) this.reset()\"><div class=\"flex gap-4\"><input type=\"text\" name=\"token\" class=\"flex-1 px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50 transition-all text-sm\" placeholder=\"输入 SSO Token (ey...) 或 Json 配置\"> <button type=\"submit\" class=\"px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200\">添加</button></div><div class=\"mt-2 text-xs text-slate-400\">支持直接粘贴 sso=... 格式或 JSON 格式的单个/多个账号配置</div></form></div><!-- Token Grid --><div><h3 class=\"text-lg font-bold text-slate-800 mb-4\">账号列表</h3><div id=\"tokenGrid\" class=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</div></div><!-- OAuth Login --><div class=\"bg-white rounded-2xl p-6 shadow-sm border border-slate-100\"><h3 class=\"text-lg font-bold text-slate-800 mb-4\">OAuth 登录（Google）</h3><div class=\"space-y-4\"><div class=\"flex flex-col md:flex-row gap-4 md:items-center\"><button type=\"button\" id=\"oauthStartBtn\" class=\"px-6 py-2.5 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors shadow-sm shadow-emerald-200\">发起 OAuth 登录</button><div class=\"text-xs text-slate-500\">请在新窗口完成 Google 授权，然后复制回调页面地址栏中的完整 URL</div></div><div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\"><div><label class=\"block text-sm font-medium text-slate-700 mb-1\">回调 URL（完整）</label> <input type=\"text\" id=\"oauthCallbackUrl\" class=\"w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50 transition-all text-sm\" placeholder=\"粘贴 http://localhost:.../oauth-callback?code=...&state=...\"></div><div><label class=\"block text-sm font-medium text-slate-700 mb-1\">自定义项目ID（可选）</label> <input type=\"text\" id=\"oauthCustomProjectId\" class=\"w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50 transition-all text-sm\" placeholder=\"例如 my-project-id\"></div></div><div class=\"flex items-center gap-2\"><input type=\"checkbox\" id=\"oauthAllowRandomProjectId\" class=\"h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500\"> <label for=\"oauthAllowRandomProjectId\" class=\"text-sm text-slate-700\">允许使用随机项目ID（无法自动获取时）</label></div><div class=\"flex flex-col md:flex-row gap-4 md:items-center\"><button type=\"button\" id=\"oauthSubmitBtn\" class=\"px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200\">提交回调URL</button><div id=\"oauthStatus\" class=\"text-sm text-slate-600\"></div></div></div><script>\n\t\t\t\t\t(() => {\n\t\t\t\t\t\tconst startBtn = document.getElementById('oauthStartBtn');\n\t\t\t\t\t\tconst submitBtn = document.getElementById('oauthSubmitBtn');\n\t\t\t\t\t\tconst statusEl = document.getElementById('oauthStatus');\n\n\t\t\t\t\t\tconst setStatus = (msg, type) => {\n\t\t\t\t\t\t\tstatusEl.textContent = msg || '';\n\t\t\t\t\t\t\tstatusEl.className = 'text-sm ' + (type === 'error' ? 'text-red-600' : type === 'success' ? 'text-emerald-600' : 'text-slate-600');\n\t\t\t\t\t\t};\n\n\t\t\t\t\t\tconst toast = (message, type) => {\n\t\t\t\t\t\t\tdocument.body.dispatchEvent(new CustomEvent('showMessage', { detail: { message, type } }));\n\t\t\t\t\t\t};\n\n\t\t\t\t\t\tstartBtn?.addEventListener('click', async () => {\n\t\t\t\t\t\t\tsetStatus('正在生成授权链接...', 'info');\n\t\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t\tconst resp = await fetch('/manager/api/oauth/url', { credentials: 'same-origin' });\n\t\t\t\t\t\t\t\tconst data = await resp.json().catch(() => ({}));\n\t\t\t\t\t\t\t\tif (!resp.ok || !data.url) throw new Error(data.error || '获取授权链接失败');\n\n\t\t\t\t\t\t\t\twindow.open(data.url, '_blank', 'noopener');\n\t\t\t\t\t\t\t\tsetStatus('已打开授权页面：请完成授权后复制回调 URL。', 'success');\n\t\t\t\t\t\t\t\ttoast('已打开 Google 授权页面', 'success');\n\t\t\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\t\t\tsetStatus(e?.message || '获取授权链接失败', 'error');\n\t\t\t\t\t\t\t\ttoast(e?.message || '获取授权链接失败', 'error');\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t});\n\n\t\t\t\t\t\tsubmitBtn?.addEventListener('click', async () => {\n\t\t\t\t\t\t\tconst url = document.getElementById('oauthCallbackUrl')?.value?.trim();\n\t\t\t\t\t\t\tconst customProjectId = document.getElementById('oauthCustomProjectId')?.value?.trim();\n\t\t\t\t\t\t\tconst allowRandomProjectId = !!document.getElementById('oauthAllowRandomProjectId')?.checked;\n\n\t\t\t\t\t\t\tif (!url) {\n\t\t\t\t\t\t\t\tsetStatus('请先粘贴回调 URL。', 'error');\n\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t}\n\n\t\t\t\t\t\t\tsetStatus('正在解析并保存账号...', 'info');\n\t\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t\tconst resp = await fetch('/manager/api/oauth/parse-url', {\n\t\t\t\t\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\t\t\t\t\tcredentials: 'same-origin',\n\t\t\t\t\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\t\t\t\t\tbody: JSON.stringify({ url, customProjectId, allowRandomProjectId })\n\t\t\t\t\t\t\t\t});\n\t\t\t\t\t\t\t\tconst data = await resp.json().catch(() => ({}));\n\t\t\t\t\t\t\t\tif (!resp.ok || !data.success) throw new Error(data.error || '处理失败');\n\n\t\t\t\t\t\t\t\tsetStatus('OAuth 登录成功，账号已保存。', 'success');\n\t\t\t\t\t\t\t\ttoast('OAuth 登录成功，账号已保存', 'success');\n\n\t\t\t\t\t\t\t\tconst urlInput = document.getElementById('oauthCallbackUrl');\n\t\t\t\t\t\t\t\tif (urlInput) urlInput.value = '';\n\n\t\t\t\t\t\t\t\tif (window.htmx) {\n\t\t\t\t\t\t\t\t\thtmx.trigger(document.body, 'refreshList');\n\t\t\t\t\t\t\t\t\thtmx.trigger(document.body, 'refreshStats');\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\t\t\tsetStatus(e?.message || '处理失败', 'error');\n\t\t\t\t\t\t\t\ttoast(e?.message || '处理失败', 'error');\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t});\n\t\t\t\t\t})();\n\t\t\t\t</script></div><!-- Token Grid --><div><h3 class=\"text-lg font-bold text-slate-800 mb-4\">账号列表</h3><div id=\"tokenGrid\" class=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5\" hx-get=\"/manager/api/list\" hx-trigger=\"refreshList from:body\" hx-swap=\"innerHTML\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -202,7 +202,7 @@ func StatsCard(label string, value int, textColor string, containerClass string)
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 84, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 181, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
@@ -237,7 +237,7 @@ func StatsCard(label string, value int, textColor string, containerClass string)
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", value))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 85, Col: 103}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 182, Col: 103}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 		if templ_7745c5c3_Err != nil {
@@ -336,7 +336,7 @@ func TokenCard(account credential.Account) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(account.Email)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 120, Col: 99}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 217, Col: 99}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
@@ -350,7 +350,7 @@ func TokenCard(account credential.Account) templ.Component {
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(account.Email)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 122, Col: 39}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 219, Col: 39}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
@@ -360,7 +360,7 @@ func TokenCard(account credential.Account) templ.Component {
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(account.ProjectID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 124, Col: 43}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 221, Col: 43}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
@@ -400,7 +400,7 @@ func TokenCard(account credential.Account) templ.Component {
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(account.AccessToken[:12])
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 135, Col: 47}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 232, Col: 47}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 		if templ_7745c5c3_Err != nil {
@@ -413,7 +413,7 @@ func TokenCard(account credential.Account) templ.Component {
 		var templ_7745c5c3_Var20 string
 		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(account.AccessToken[len(account.AccessToken)-6:])
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 135, Col: 102}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 232, Col: 102}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 		if templ_7745c5c3_Err != nil {
@@ -427,7 +427,7 @@ func TokenCard(account credential.Account) templ.Component {
 			var templ_7745c5c3_Var21 string
 			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(time.Unix(account.Timestamp+int64(account.ExpiresIn), 0).Format("2006-01-02 15:04:05"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 145, Col: 116}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 242, Col: 116}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 			if templ_7745c5c3_Err != nil {
@@ -446,7 +446,7 @@ func TokenCard(account credential.Account) templ.Component {
 		var templ_7745c5c3_Var22 string
 		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/manager/api/refresh?id=%s", account.SessionID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 154, Col: 94}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 251, Col: 94}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 		if templ_7745c5c3_Err != nil {
@@ -459,7 +459,7 @@ func TokenCard(account credential.Account) templ.Component {
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/manager/api/toggle?id=%s", account.SessionID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 160, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 257, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 		if templ_7745c5c3_Err != nil {
@@ -487,7 +487,7 @@ func TokenCard(account credential.Account) templ.Component {
 		var templ_7745c5c3_Var24 string
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/manager/api/delete?id=%s", account.SessionID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 170, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 267, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 		if templ_7745c5c3_Err != nil {

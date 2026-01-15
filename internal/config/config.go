@@ -11,6 +11,8 @@ type Config struct {
 	Host string
 	Port int
 
+	OAuthRedirectPort int
+
 	UserAgent string
 	TimeoutMs int
 	Proxy     string
@@ -27,8 +29,8 @@ type Config struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 
-	DataDir string
-    AdminPassword string
+	DataDir       string
+	AdminPassword string
 }
 
 var (
@@ -45,9 +47,12 @@ func Load() *Config {
 	once.Do(func() {
 		loadDotEnv()
 
+		port := getEnvInt("PORT", 8045)
+
 		cfg = &Config{
 			Host:               getEnv("HOST", "0.0.0.0"),
-			Port:               getEnvInt("PORT", 8045),
+			Port:               port,
+			OAuthRedirectPort:  getEnvInt("OAUTH_REDIRECT_PORT", port),
 			UserAgent:          getEnv("API_USER_AGENT", "antigravity/1.11.3 windows/amd64"),
 			TimeoutMs:          getEnvInt("TIMEOUT", 180000),
 			Proxy:              getEnv("PROXY", ""),
@@ -59,7 +64,11 @@ func Load() *Config {
 			GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
 			GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 			DataDir:            getEnv("DATA_DIR", "./data"),
-            AdminPassword:      getEnv("ADMIN_PASSWORD", "123456"),
+			AdminPassword:      getEnv("ADMIN_PASSWORD", "123456"),
+		}
+
+		if cfg.OAuthRedirectPort <= 0 {
+			cfg.OAuthRedirectPort = cfg.Port
 		}
 
 		for i, arg := range os.Args[1:] {
