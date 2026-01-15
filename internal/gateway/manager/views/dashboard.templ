@@ -235,18 +235,7 @@ templ TokenCard(account credential.Account) {
         </div>
         
         <div class="space-y-3 relative z-10">
-             <div class="flex justify-between items-center text-sm border-t border-slate-50 pt-3">
-                <span class="text-slate-500 text-xs">过期时间</span>
-                <span class="text-slate-700 font-medium text-xs">
-                     if account.Timestamp > 0 && account.ExpiresIn > 0 {
-                          { account.FormatExpiresAt() }
-                     } else {
-                          -
-                     }
-                </span>
-             </div>
-
-             <div class="flex gap-2 mt-4">
+             <div class="flex gap-2 mt-4 border-t border-slate-50 pt-3">
                 <button class="flex-1 py-1.5 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded transition-colors"
                         hx-post={ fmt.Sprintf("/manager/api/refresh?id=%s", account.SessionID) }
                         hx-target="closest .group"
