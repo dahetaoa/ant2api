@@ -47,7 +47,7 @@ func Dashboard(accounts []credential.Account, stats map[string]int) templ.Compon
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"fixed top-0 left-0 right-0 z-50 bg-white shadow py-3 px-6\"><div class=\"max-w-7xl mx-auto flex items-center justify-center\"><div class=\"font-bold text-xl tracking-tight text-slate-900\">Antigravity 2 API 管理面板</div></div></div><div class=\"max-w-7xl mx-auto px-6 space-y-8 mt-4\"><!-- Overview Section --><div class=\"bg-white rounded-2xl p-6 shadow-sm border border-slate-100\"><div class=\"flex justify-between items-center mb-6\"><h2 class=\"text-lg font-bold text-slate-800\">概览</h2><div class=\"flex gap-3\"><button class=\"px-4 py-2 text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2\" hx-post=\"/manager/api/refresh_all\" hx-swap=\"none\" hx-indicator=\"#refresh-indicator\"><span id=\"refresh-indicator\" class=\"htmx-indicator animate-spin\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M21 12a9 9 0 1 1-6.219-8.56\"></path></svg></span> <span class=\"htmx-request:hidden\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"></path><path d=\"M21 3v5h-5\"></path><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"></path><path d=\"M3 21v-5h5\"></path></svg></span> 刷新全部</button></div></div><div class=\"grid grid-cols-1 md:grid-cols-3 gap-4\" hx-get=\"/manager/api/stats\" hx-trigger=\"every 10s, refreshStats from:body\" hx-swap=\"innerHTML\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"fixed top-0 left-0 right-0 z-50 bg-white shadow py-3 px-6\"><div class=\"max-w-7xl mx-auto flex items-center justify-center\"><div class=\"font-bold text-xl tracking-tight text-slate-900\">Antigravity 2 API 管理面板</div></div></div><div class=\"max-w-7xl mx-auto px-6 space-y-8 mt-4\"><!-- Overview Section --><div class=\"bg-white rounded-2xl p-6 shadow-sm border border-slate-100\"><div class=\"flex justify-between items-center mb-6\"><h2 class=\"text-lg font-bold text-slate-800\">概览</h2><div class=\"flex gap-3\"><button class=\"px-4 py-2 text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2\" hx-post=\"/manager/api/refresh_all\" hx-swap=\"none\" hx-indicator=\"#refresh-indicator\" hx-on::after-request=\"document.body.dispatchEvent(new CustomEvent('showMessage', { detail: { message: '所有账号信息已刷新', type: 'success' } }))\"><span id=\"refresh-indicator\" class=\"htmx-indicator animate-spin\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M21 12a9 9 0 1 1-6.219-8.56\"></path></svg></span> <span class=\"htmx-request:hidden\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"></path><path d=\"M21 3v5h-5\"></path><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"></path><path d=\"M3 21v-5h5\"></path></svg></span> 刷新全部</button></div></div><div class=\"grid grid-cols-1 md:grid-cols-3 gap-4\" hx-get=\"/manager/api/stats\" hx-trigger=\"every 10s, refreshStats from:body\" hx-swap=\"innerHTML\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -202,7 +202,7 @@ func StatsCard(label string, value int, textColor string, containerClass string)
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 187, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 188, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
@@ -237,7 +237,7 @@ func StatsCard(label string, value int, textColor string, containerClass string)
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", value))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 188, Col: 103}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 189, Col: 103}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 		if templ_7745c5c3_Err != nil {
@@ -336,7 +336,7 @@ func TokenCard(account credential.Account, quotaOpen bool) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(account.Email)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 223, Col: 94}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 224, Col: 94}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
@@ -350,7 +350,7 @@ func TokenCard(account credential.Account, quotaOpen bool) templ.Component {
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(account.Email)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 225, Col: 39}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 226, Col: 39}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
@@ -360,7 +360,7 @@ func TokenCard(account credential.Account, quotaOpen bool) templ.Component {
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(account.ProjectID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 227, Col: 43}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 228, Col: 43}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
@@ -379,20 +379,20 @@ func TokenCard(account credential.Account, quotaOpen bool) templ.Component {
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/manager/api/refresh?id=%s", account.SessionID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 238, Col: 94}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 239, Col: 94}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "\" hx-vals=\"js:{quotaOpen: this.closest('.group').querySelector('details[data-quota-details]')?.open ? 1 : 0}\" hx-target=\"closest .group\" hx-swap=\"outerHTML\">刷新</button> <button class=\"flex-1 py-1.5 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded transition-colors\" hx-post=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "\" hx-vals=\"js:{quotaOpen: this.closest('.group').querySelector('details[data-quota-details]')?.open ? 1 : 0}\" hx-target=\"closest .group\" hx-swap=\"outerHTML\" hx-on::after-request=\"document.body.dispatchEvent(new CustomEvent('showMessage', { detail: { message: '账号信息已刷新', type: 'success' } }))\">刷新</button> <button class=\"flex-1 py-1.5 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded transition-colors\" hx-post=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/manager/api/toggle?id=%s", account.SessionID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 245, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 247, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 		if templ_7745c5c3_Err != nil {
@@ -420,7 +420,7 @@ func TokenCard(account credential.Account, quotaOpen bool) templ.Component {
 		var templ_7745c5c3_Var20 string
 		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/manager/api/delete?id=%s", account.SessionID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 255, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 257, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 		if templ_7745c5c3_Err != nil {
@@ -486,14 +486,14 @@ func QuotaPanel(account credential.Account) templ.Component {
 			templ_7745c5c3_Var21 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<summary class=\"list-none flex w-full items-center justify-between cursor-pointer select-none text-xs text-slate-600\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" class=\"text-slate-400 transition-transform duration-200 rotate-0 group-open:rotate-90\"><path d=\"m9 18 6-6-6-6\"></path></svg> <span class=\"font-medium\">模型配额</span></summary><div class=\"mt-3 max-h-0 overflow-hidden transition-all duration-300 ease-in-out group-open:max-h-[520px]\"><div id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<summary class=\"list-none flex w-full items-center justify-between cursor-pointer select-none text-xs text-slate-600\"><span class=\"font-medium\">模型配额</span> <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" class=\"text-slate-400 transition-transform duration-200 rotate-90 group-open:rotate-0\"><path d=\"m6 9 6 6 6-6\"></path></svg></summary><div class=\"mt-3 max-h-0 overflow-hidden transition-all duration-300 ease-in-out group-open:max-h-[520px]\"><div id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var22 string
 		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs("quota-" + account.SessionID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 282, Col: 40}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 284, Col: 40}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 		if templ_7745c5c3_Err != nil {

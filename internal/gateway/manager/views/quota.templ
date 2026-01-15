@@ -131,13 +131,13 @@ func barClass(frac *float64) string {
 	v := *frac
 	switch {
 	case v <= 0:
-		return "bg-gradient-to-r from-red-600 to-red-500 h-full rounded-full transition-all duration-700 ease-out quota-bar-pop"
+		return "bg-red-500 h-full rounded-full transition-all duration-700 ease-out quota-bar-pop"
 	case v < 0.2:
-		return "bg-gradient-to-r from-amber-500 to-amber-400 h-full rounded-full transition-all duration-700 ease-out quota-bar-pop"
+		return "bg-amber-500 h-full rounded-full transition-all duration-700 ease-out quota-bar-pop"
 	case v < 0.5:
-		return "bg-gradient-to-r from-yellow-500 to-amber-400 h-full rounded-full transition-all duration-700 ease-out quota-bar-pop"
+		return "bg-yellow-400 h-full rounded-full transition-all duration-700 ease-out quota-bar-pop"
 	default:
-		return "bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-700 ease-out quota-bar-pop"
+		return "bg-emerald-500 h-full rounded-full transition-all duration-700 ease-out quota-bar-pop"
 	}
 }
 

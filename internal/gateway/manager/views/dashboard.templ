@@ -23,7 +23,8 @@ templ Dashboard(accounts []credential.Account, stats map[string]int) {
 						<button class="px-4 py-2 text-sm font-medium bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2"
 						    hx-post="/manager/api/refresh_all" 
                             hx-swap="none"
-                            hx-indicator="#refresh-indicator">
+                            hx-indicator="#refresh-indicator"
+                            hx-on::after-request="document.body.dispatchEvent(new CustomEvent('showMessage', { detail: { message: '所有账号信息已刷新', type: 'success' } }))">
                             <span id="refresh-indicator" class="htmx-indicator animate-spin">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                             </span>
@@ -238,7 +239,8 @@ templ TokenCard(account credential.Account, quotaOpen bool) {
                         hx-post={ fmt.Sprintf("/manager/api/refresh?id=%s", account.SessionID) }
                         hx-vals="js:{quotaOpen: this.closest('.group').querySelector('details[data-quota-details]')?.open ? 1 : 0}"
                         hx-target="closest .group"
-                        hx-swap="outerHTML">
+                        hx-swap="outerHTML"
+                        hx-on::after-request="document.body.dispatchEvent(new CustomEvent('showMessage', { detail: { message: '账号信息已刷新', type: 'success' } }))">
                     刷新
                 </button>
                 <button class="flex-1 py-1.5 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded transition-colors"
@@ -275,8 +277,8 @@ templ TokenCard(account credential.Account, quotaOpen bool) {
 
 templ QuotaPanel(account credential.Account) {
 	<summary class="list-none flex w-full items-center justify-between cursor-pointer select-none text-xs text-slate-600">
-		<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-slate-400 transition-transform duration-200 rotate-0 group-open:rotate-90"><path d="m9 18 6-6-6-6"/></svg>
 		<span class="font-medium">模型配额</span>
+		<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-slate-400 transition-transform duration-200 rotate-90 group-open:rotate-0"><path d="m6 9 6 6 6-6"/></svg>
 	</summary>
 	<div class="mt-3 max-h-0 overflow-hidden transition-all duration-300 ease-in-out group-open:max-h-[520px]">
 		<div id={ "quota-" + account.SessionID }>
