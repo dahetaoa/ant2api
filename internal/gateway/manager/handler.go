@@ -1,11 +1,15 @@
 package manager
 
 import (
+	"context"
+	"errors"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"anti2api-golang/refactor/internal/config"
@@ -13,6 +17,7 @@ import (
 	"anti2api-golang/refactor/internal/gateway/manager/views"
 	"anti2api-golang/refactor/internal/logger"
 	"anti2api-golang/refactor/internal/pkg/id"
+	"anti2api-golang/refactor/internal/vertex"
 )
 
 const sessionCookieName = "grok_admin_session"
@@ -124,6 +129,7 @@ func calculateStats(accounts []credential.Account) map[string]int {
 func HandleDashboard(w http.ResponseWriter, r *http.Request) {
 	store := credential.GetStore()
 	accounts := store.GetAll()
+	sortAccountsByCreatedAtDesc(accounts)
 	stats := calculateStats(accounts)
 	views.Dashboard(accounts, stats).Render(r.Context(), w)
 }
@@ -163,13 +169,16 @@ func HandleList(w http.ResponseWriter, r *http.Request) {
 		}
 		filtered = append(filtered, acc)
 	}
-	// Reverse order to show newest first? Store appends to end.
-	// Let's reverse
-	for i, j := 0, len(filtered)-1; i < j; i, j = i+1, j-1 {
-		filtered[i], filtered[j] = filtered[j], filtered[i]
-	}
+	sortAccountsByCreatedAtDesc(filtered)
 
+	w.Header().Set("HX-Trigger", "refreshQuota")
 	views.TokenList(filtered).Render(r.Context(), w)
+}
+
+func sortAccountsByCreatedAtDesc(accounts []credential.Account) {
+	sort.SliceStable(accounts, func(i, j int) bool {
+		return accounts[i].CreatedAt.After(accounts[j].CreatedAt)
+	})
 }
 
 func HandleDelete(w http.ResponseWriter, r *http.Request) {
@@ -197,6 +206,7 @@ func HandleToggle(w http.ResponseWriter, r *http.Request) {
 		// Actually better to get it fresh
 		updatedAccounts := store.GetAll()
 		if idx < len(updatedAccounts) { // Safety check
+			w.Header().Set("HX-Trigger", "refreshQuota")
 			views.TokenCard(updatedAccounts[idx]).Render(r.Context(), w)
 		}
 	}
@@ -215,6 +225,8 @@ func HandleRefresh(w http.ResponseWriter, r *http.Request) {
 
 		updatedAccounts := store.GetAll()
 		if idx < len(updatedAccounts) {
+			InvalidateQuotaCache(id)
+			w.Header().Set("HX-Trigger", "refreshQuota")
 			views.TokenCard(updatedAccounts[idx]).Render(r.Context(), w)
 		}
 	}
@@ -226,6 +238,197 @@ func HandleRefreshAll(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("HX-Trigger", "refreshStats, refreshList")
 	w.Write([]byte(""))
+}
+
+type quotaAPIResponse struct {
+	SessionID string            `json:"sessionId"`
+	Groups    []QuotaGroup      `json:"groups,omitempty"`
+	Error     string            `json:"error,omitempty"`
+	Cached    bool              `json:"cached,omitempty"`
+	FetchedAt *time.Time        `json:"fetchedAt,omitempty"`
+}
+
+func HandleQuota(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "不支持的请求方法", http.StatusMethodNotAllowed)
+		return
+	}
+
+	sessionID := strings.TrimSpace(r.URL.Query().Get("id"))
+	force := strings.TrimSpace(r.URL.Query().Get("force")) == "1"
+	if sessionID == "" {
+		renderQuotaError(w, r, "", "缺少 id 参数")
+		return
+	}
+
+	idx := findIndexBySessionID(sessionID)
+	if idx == -1 {
+		renderQuotaError(w, r, sessionID, "未找到对应账号")
+		return
+	}
+
+	accounts := credential.GetStore().GetAll()
+	if idx >= len(accounts) {
+		renderQuotaError(w, r, sessionID, "未找到对应账号")
+		return
+	}
+
+	q, cached, err := GetAccountQuotaCached(r.Context(), accounts[idx], force)
+	if err != nil {
+		renderQuotaError(w, r, sessionID, quotaErrorMessage(err))
+		return
+	}
+
+	if isHTMX(r) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		views.QuotaContent(sessionID, toViewQuotaGroups(q.Groups), "").Render(r.Context(), w)
+		return
+	}
+
+	resp := quotaAPIResponse{
+		SessionID: sessionID,
+		Groups:    q.Groups,
+		Cached:    cached,
+		FetchedAt: &q.FetchedAt,
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func HandleQuotaAll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "不支持的请求方法", http.StatusMethodNotAllowed)
+		return
+	}
+
+	force := strings.TrimSpace(r.URL.Query().Get("force")) == "1"
+
+	accounts := credential.GetStore().GetAll()
+	if len(accounts) == 0 {
+		if isHTMX(r) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write([]byte(""))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"accounts": []quotaAPIResponse{}})
+		return
+	}
+
+	type result struct {
+		sessionID string
+		groups    []QuotaGroup
+		cached    bool
+		err       error
+	}
+
+	results := make([]result, len(accounts))
+
+	sem := make(chan struct{}, quotaMaxConcurrency)
+	wg := sync.WaitGroup{}
+
+	for i, acc := range accounts {
+		i := i
+		acc := acc
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			select {
+			case sem <- struct{}{}:
+			case <-r.Context().Done():
+				return
+			}
+			defer func() { <-sem }()
+
+			q, cached, err := GetAccountQuotaCached(r.Context(), acc, force)
+			if err != nil || q == nil {
+				results[i] = result{sessionID: acc.SessionID, cached: cached, err: err}
+				return
+			}
+			results[i] = result{sessionID: acc.SessionID, groups: q.Groups, cached: cached}
+		}()
+	}
+
+	wg.Wait()
+
+	if isHTMX(r) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		for _, res := range results {
+			views.QuotaSwapOOB(res.sessionID, toViewQuotaGroups(res.groups), quotaErrorMessage(res.err)).Render(r.Context(), w)
+		}
+		return
+	}
+
+	out := make([]quotaAPIResponse, 0, len(results))
+	for _, res := range results {
+		resp := quotaAPIResponse{SessionID: res.sessionID, Cached: res.cached}
+		if res.err != nil {
+			resp.Error = quotaErrorMessage(res.err)
+		} else {
+			resp.Groups = res.groups
+		}
+		out = append(out, resp)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"accounts": out})
+}
+
+func renderQuotaError(w http.ResponseWriter, r *http.Request, sessionID, msg string) {
+	if isHTMX(r) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		views.QuotaContent(sessionID, nil, msg).Render(r.Context(), w)
+		return
+	}
+	writeJSON(w, http.StatusOK, quotaAPIResponse{SessionID: sessionID, Error: msg})
+}
+
+func isHTMX(r *http.Request) bool {
+	return strings.EqualFold(strings.TrimSpace(r.Header.Get("HX-Request")), "true")
+}
+
+func quotaErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	var apiErr *vertex.APIError
+	if errors.As(err, &apiErr) {
+		if apiErr.Status == http.StatusUnauthorized {
+			return "Token 已失效或无权限，无法获取配额"
+		}
+		if apiErr.Status == http.StatusTooManyRequests {
+			return "请求过于频繁，请稍后重试"
+		}
+		if apiErr.Message != "" {
+			return "无法获取配额：" + apiErr.Message
+		}
+		return "无法获取配额：" + err.Error()
+	}
+
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "请求超时，无法获取配额"
+	}
+	if errors.Is(err, context.Canceled) {
+		return "请求已取消"
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "unauthorized") {
+		return "Token 已失效或无权限，无法获取配额"
+	}
+	return "无法获取配额：" + err.Error()
+}
+
+func toViewQuotaGroups(groups []QuotaGroup) []views.QuotaGroup {
+	if len(groups) == 0 {
+		return nil
+	}
+	out := make([]views.QuotaGroup, 0, len(groups))
+	for _, g := range groups {
+		out = append(out, views.QuotaGroup{
+			Label:             g.GroupName,
+			RemainingFraction: g.RemainingFraction,
+			ResetTime:         g.ResetTime,
+		})
+	}
+	return out
 }
 
 func HandleOAuthURL(w http.ResponseWriter, r *http.Request) {

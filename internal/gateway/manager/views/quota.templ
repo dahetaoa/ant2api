@@ -1,0 +1,149 @@
+package views
+
+import (
+	"fmt"
+	"time"
+)
+
+type QuotaGroup struct {
+	Label             string
+	RemainingFraction *float64
+	ResetTime         string
+}
+
+var chinaLocation = time.FixedZone("Asia/Shanghai", 8*60*60)
+
+templ QuotaSwapOOB(sessionID string, groups []QuotaGroup, errMsg string) {
+	<div id={ "quota-" + sessionID } hx-swap-oob="innerHTML">
+		@QuotaContent(sessionID, groups, errMsg)
+	</div>
+}
+
+templ QuotaContent(sessionID string, groups []QuotaGroup, errMsg string) {
+	if errMsg != "" {
+		@QuotaError(sessionID, errMsg)
+	} else if len(groups) == 0 {
+		@QuotaEmpty(sessionID)
+	} else {
+		@QuotaList(groups)
+	}
+}
+
+templ QuotaSkeleton() {
+	<div class="space-y-3 animate-pulse">
+		@QuotaSkeletonRow()
+		@QuotaSkeletonRow()
+		@QuotaSkeletonRow()
+	</div>
+}
+
+templ QuotaSkeletonRow() {
+	<div class="space-y-2">
+		<div class="flex justify-between items-center">
+			<div class="h-3 w-24 bg-slate-200 rounded"></div>
+			<div class="flex items-center gap-2">
+				<div class="h-3 w-10 bg-slate-200 rounded"></div>
+				<div class="h-3 w-14 bg-slate-200 rounded"></div>
+			</div>
+		</div>
+		<div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+			<div class="bg-slate-300 h-full w-1/3 rounded-full"></div>
+		</div>
+	</div>
+}
+
+templ QuotaEmpty(sessionID string) {
+	<div class="py-3 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-600 flex items-center justify-between gap-3">
+		<span>暂无配额数据</span>
+		if sessionID != "" {
+			<button class="px-3 py-1.5 text-xs font-medium bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+				hx-get={ fmt.Sprintf("/manager/api/quota?id=%s&force=1", sessionID) }
+				hx-target={ "#quota-" + sessionID }
+				hx-swap="innerHTML">
+				重试
+			</button>
+		}
+	</div>
+}
+
+templ QuotaError(sessionID string, msg string) {
+	<div class="py-3 px-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700 flex items-center justify-between gap-3">
+		<div class="min-w-0">
+			<div class="font-medium">无法获取配额</div>
+			<div class="text-xs text-red-600/80 truncate" title={ msg }>{ msg }</div>
+		</div>
+		if sessionID != "" {
+			<button class="shrink-0 px-3 py-1.5 text-xs font-medium bg-white border border-red-200 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
+				hx-get={ fmt.Sprintf("/manager/api/quota?id=%s&force=1", sessionID) }
+				hx-target={ "#quota-" + sessionID }
+				hx-swap="innerHTML">
+				重试
+			</button>
+		}
+	</div>
+}
+
+templ QuotaList(groups []QuotaGroup) {
+	<div class="space-y-3 py-3 px-4 bg-slate-50/30 border border-slate-100 rounded-xl">
+		for _, g := range groups {
+			@QuotaItem(g)
+		}
+	</div>
+}
+
+templ QuotaItem(g QuotaGroup) {
+	<div class="space-y-1.5">
+		<div class="flex justify-between items-center text-xs font-medium">
+			<span class="text-slate-700">{ g.Label }</span>
+			<div class="flex items-center gap-2">
+				<span class="font-bold text-slate-900">{ formatPercent(g.RemainingFraction) }</span>
+				<span class="text-slate-400 font-normal">{ formatResetTime(g.ResetTime) }</span>
+			</div>
+		</div>
+		<div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+			<div class={ barClass(g.RemainingFraction) } style={ barWidthStyle(g.RemainingFraction) }></div>
+		</div>
+	</div>
+}
+
+func formatResetTime(rt string) string {
+	if rt == "" {
+		return "未知"
+	}
+	t, err := time.Parse(time.RFC3339, rt)
+	if err != nil {
+		return rt
+	}
+	return t.In(chinaLocation).Format("01/02 15:04")
+}
+
+func formatPercent(frac *float64) string {
+	if frac == nil {
+		return "未知"
+	}
+	return fmt.Sprintf("%.0f%%", (*frac)*100)
+}
+
+func barClass(frac *float64) string {
+	if frac == nil {
+		return "bg-slate-300 h-full rounded-full"
+	}
+	v := *frac
+	switch {
+	case v <= 0:
+		return "bg-gradient-to-r from-red-600 to-red-500 h-full rounded-full transition-all duration-700 ease-out"
+	case v < 0.2:
+		return "bg-gradient-to-r from-amber-500 to-amber-400 h-full rounded-full transition-all duration-700 ease-out"
+	case v < 0.5:
+		return "bg-gradient-to-r from-yellow-500 to-amber-400 h-full rounded-full transition-all duration-700 ease-out"
+	default:
+		return "bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-700 ease-out"
+	}
+}
+
+func barWidthStyle(frac *float64) string {
+	if frac == nil {
+		return "width: 0%"
+	}
+	return fmt.Sprintf("width: %.0f%%", (*frac)*100)
+}

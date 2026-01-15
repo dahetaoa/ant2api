@@ -42,7 +42,7 @@ func Layout(title string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</title><script src=\"https://unpkg.com/htmx.org@1.9.10\"></script><script src=\"https://cdn.tailwindcss.com\"></script><link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\"><style>\n\t\t\tbody { font-family: 'Inter', sans-serif; }\n            .htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }\n            .htmx-request .htmx-indicator { opacity: 1 }\n            .htmx-request.htmx-indicator { opacity: 1 }\n\t\t</style></head><body class=\"bg-slate-50 text-slate-900 min-h-screen pt-20 pb-10\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</title><script src=\"https://unpkg.com/htmx.org@1.9.10\"></script><script src=\"https://cdn.tailwindcss.com\"></script><link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\"><style>\n\t\t\tbody { font-family: 'Inter', sans-serif; }\n            .htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }\n            .htmx-request .htmx-indicator { opacity: 1 }\n            .htmx-request.htmx-indicator { opacity: 1 }\n\t\t\tsummary::-webkit-details-marker { display: none; }\n\t\t\tsummary::marker { content: \"\"; }\n\t\t</style></head><body class=\"bg-slate-50 text-slate-900 min-h-screen pt-20 pb-10\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

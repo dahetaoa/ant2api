@@ -62,6 +62,8 @@ func NewRouter() http.Handler {
 	managerMux.HandleFunc("/manager/api/toggle", manager.HandleToggle)
 	managerMux.HandleFunc("/manager/api/refresh", manager.HandleRefresh)
 	managerMux.HandleFunc("/manager/api/refresh_all", manager.HandleRefreshAll)
+	managerMux.HandleFunc("/manager/api/quota", manager.HandleQuota)
+	managerMux.HandleFunc("/manager/api/quota/all", manager.HandleQuotaAll)
 	managerMux.HandleFunc("/manager/api/oauth/url", manager.HandleOAuthURL)
 	managerMux.HandleFunc("/manager/api/oauth/parse-url", manager.HandleOAuthParseURL)
 

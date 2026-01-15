@@ -156,6 +156,12 @@ templ Dashboard(accounts []credential.Account, stats map[string]int) {
 				    @TokenList(accounts)
 			    </div>
             </div>
+
+			<!-- Quota Prefetch (HTMX OOB swap) -->
+			<div class="hidden"
+				hx-post="/manager/api/quota/all"
+				hx-trigger="load, refreshQuota from:body"
+				hx-swap="none"></div>
 		</div>
 	}
 }
@@ -260,6 +266,21 @@ templ TokenCard(account credential.Account) {
                     删除
                 </button>
              </div>
+
+			 <details class="mt-3 border-t border-slate-50 pt-3 group">
+				<summary class="list-none flex items-center justify-between cursor-pointer select-none text-xs text-slate-600">
+					<div class="flex items-center gap-2">
+						<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18"/><path d="M12 3v18"/></svg>
+						<span class="font-medium">模型配额</span>
+					</div>
+					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-slate-400 transition-transform duration-200 group-open:rotate-180"><path d="m6 9 6 6 6-6"/></svg>
+				</summary>
+				<div class="mt-3 max-h-0 overflow-hidden transition-all duration-300 ease-in-out group-open:max-h-[520px]">
+					<div id={ "quota-" + account.SessionID }>
+						@QuotaSkeleton()
+					</div>
+				</div>
+			 </details>
         </div>
     </div>
 }
