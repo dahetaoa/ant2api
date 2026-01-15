@@ -7,12 +7,20 @@ services:
     volumes:
       - ./data:/app/data
     environment:
+      # ===== 服务器配置 =====
       - HOST=0.0.0.0
       - PORT=8045
-      - API_USER_AGENT=antigravity/1.11.17 windows/amd64
-      - API_KEY=sk-123456
       - DATA_DIR=./data
       - TIMEOUT=180000
+
+      # ===== 认证安全 =====
+      - WEBUI_PASSWORD=changeme
+      - API_KEY=sk-123456
+
+      # ===== 功能配置 =====
       - ENDPOINT_MODE=production
-      - DEBUG=high
+      - API_USER_AGENT=antigravity/1.11.17 windows/amd64
+
+      # ===== 调试配置 =====
+      - DEBUG=off
     restart: unless-stopped

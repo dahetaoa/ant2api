@@ -53,8 +53,15 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 如果未设置密码，拒绝登录
+	adminPassword := config.Get().AdminPassword
+	if adminPassword == "" {
+		views.Login("管理密码未配置，请设置 WEBUI_PASSWORD 环境变量").Render(r.Context(), w)
+		return
+	}
+
 	password := r.FormValue("password")
-	if password == config.Get().AdminPassword {
+	if password == adminPassword {
 		http.SetCookie(w, &http.Cookie{
 			Name:     sessionCookieName,
 			Value:    "authenticated",

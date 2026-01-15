@@ -64,7 +64,7 @@ func Load() *Config {
 			GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
 			GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 			DataDir:            getEnv("DATA_DIR", "./data"),
-			AdminPassword:      getEnv("ADMIN_PASSWORD", "123456"),
+			AdminPassword:      getEnv("WEBUI_PASSWORD", ""),
 		}
 
 		if cfg.OAuthRedirectPort <= 0 {

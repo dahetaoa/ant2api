@@ -64,7 +64,7 @@ load_env() {
 check_required_vars() {
     local missing_vars=()
     local var_descriptions=(
-        "ADMIN_PASSWORD:管理面板登录密码"
+        "WEBUI_PASSWORD:管理面板登录密码"
     )
     
     # 定义推荐配置的变量（非必须但推荐设置）
@@ -156,7 +156,7 @@ setup_missing_vars() {
         
         # 根据变量类型给出特定提示
         case "$var_name" in
-            ADMIN_PASSWORD)
+            WEBUI_PASSWORD)
                 echo -e "  ${YELLOW}提示: 建议使用强密码，至少8个字符${NC}"
                 read -sp "  请输入 $var_name: " var_value
                 echo ""
@@ -289,14 +289,27 @@ build_project() {
     log_success "项目构建完成"
 }
 
-# 停止已运行的服务
+# 停止已运行的服务（排除docker容器内的进程）
 stop_existing_server() {
-    if pgrep -f "$SERVER_BIN" > /dev/null 2>&1; then
-        log_info "正在停止已运行的服务..."
-        pkill -f "$SERVER_BIN" 2>/dev/null || true
-        sleep 1
-        log_success "已停止旧服务"
-    fi
+    local pids
+    pids=$(pgrep -f "$SERVER_BIN" 2>/dev/null || true)
+    
+    for pid in $pids; do
+        # 检查进程是否在docker容器内（cgroup包含docker则跳过）
+        if [[ -f "/proc/$pid/cgroup" ]] && grep -q docker "/proc/$pid/cgroup" 2>/dev/null; then
+            continue
+        fi
+        log_info "正在停止已运行的服务 (PID: $pid)..."
+        kill "$pid" 2>/dev/null || true
+    done
+    
+    # 等待进程退出
+    for pid in $pids; do
+        if [[ -f "/proc/$pid/cgroup" ]] && grep -q docker "/proc/$pid/cgroup" 2>/dev/null; then
+            continue
+        fi
+        while kill -0 "$pid" 2>/dev/null; do sleep 0.1; done
+    done
 }
 
 # 启动服务
