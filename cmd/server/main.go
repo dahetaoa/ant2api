@@ -22,6 +22,7 @@ func main() {
 
 	logger.Init()
 	_ = credential.GetStore()
+	credential.StartAutoRefresh()
 	logger.Banner(cfg.Port, cfg.EndpointMode)
 
 	mux := gateway.NewRouter()

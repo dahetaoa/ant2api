@@ -425,9 +425,9 @@ func TokenCard(account credential.Account) templ.Component {
 		}
 		if account.Timestamp > 0 && account.ExpiresIn > 0 {
 			var templ_7745c5c3_Var21 string
-			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(time.Unix(account.Timestamp+int64(account.ExpiresIn), 0).Format("2006-01-02 15:04:05"))
+			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(account.FormatExpiresAt())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 242, Col: 116}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/gateway/manager/views/dashboard.templ`, Line: 242, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 			if templ_7745c5c3_Err != nil {

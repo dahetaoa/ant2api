@@ -239,7 +239,7 @@ templ TokenCard(account credential.Account) {
                 <span class="text-slate-500 text-xs">过期时间</span>
                 <span class="text-slate-700 font-medium text-xs">
                      if account.Timestamp > 0 && account.ExpiresIn > 0 {
-                          { time.Unix(account.Timestamp + int64(account.ExpiresIn), 0).Format("2006-01-02 15:04:05") }
+                          { account.FormatExpiresAt() }
                      } else {
                           -
                      }
