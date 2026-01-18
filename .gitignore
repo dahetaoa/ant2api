@@ -1,6 +1,7 @@
 # Credentials and sensitive data
 .env
 data/
+new/accounts.json
 
 # Built binaries
 bin/
