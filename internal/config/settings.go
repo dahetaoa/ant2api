@@ -11,10 +11,11 @@ import (
 
 // WebUISettings represents the configurable settings that can be modified via WebUI
 type WebUISettings struct {
-	APIKey        string `json:"apiKey"`
-	WebUIPassword string `json:"webuiPassword"`
-	Debug         string `json:"debug"`
-	UserAgent     string `json:"userAgent"`
+	APIKey                 string `json:"apiKey"`
+	WebUIPassword          string `json:"webuiPassword"`
+	Debug                  string `json:"debug"`
+	UserAgent              string `json:"userAgent"`
+	Gemini3MediaResolution string `json:"gemini3MediaResolution"`
 }
 
 var settingsMu sync.RWMutex
@@ -22,11 +23,16 @@ var settingsMu sync.RWMutex
 // GetWebUISettings returns the current settings from the loaded config
 func GetWebUISettings() WebUISettings {
 	cfg := Get()
+	mr := strings.ToLower(strings.TrimSpace(cfg.Gemini3MediaResolution))
+	if mr != "" && mr != "low" && mr != "medium" && mr != "high" {
+		mr = ""
+	}
 	return WebUISettings{
-		APIKey:        cfg.APIKey,
-		WebUIPassword: cfg.AdminPassword,
-		Debug:         cfg.Debug,
-		UserAgent:     cfg.UserAgent,
+		APIKey:                 cfg.APIKey,
+		WebUIPassword:          cfg.AdminPassword,
+		Debug:                  cfg.Debug,
+		UserAgent:              cfg.UserAgent,
+		Gemini3MediaResolution: mr,
 	}
 }
 
@@ -35,25 +41,34 @@ func UpdateWebUISettings(s WebUISettings) error {
 	settingsMu.Lock()
 	defer settingsMu.Unlock()
 
+	mr := strings.ToLower(strings.TrimSpace(s.Gemini3MediaResolution))
+	if mr != "" && mr != "low" && mr != "medium" && mr != "high" {
+		mr = ""
+	}
+	s.Gemini3MediaResolution = mr
+
 	// Update in-memory config
 	cfg := Get()
 	cfg.APIKey = s.APIKey
 	cfg.AdminPassword = s.WebUIPassword
 	cfg.Debug = s.Debug
 	cfg.UserAgent = s.UserAgent
+	cfg.Gemini3MediaResolution = s.Gemini3MediaResolution
 
 	// Also update environment variables so they persist in the current process
 	_ = os.Setenv("API_KEY", s.APIKey)
 	_ = os.Setenv("WEBUI_PASSWORD", s.WebUIPassword)
 	_ = os.Setenv("DEBUG", s.Debug)
 	_ = os.Setenv("API_USER_AGENT", s.UserAgent)
+	_ = os.Setenv("GEMINI3_MEDIA_RESOLUTION", s.Gemini3MediaResolution)
 
 	// Write to .env file
 	return updateDotEnvFile(map[string]string{
-		"API_KEY":        s.APIKey,
-		"WEBUI_PASSWORD": s.WebUIPassword,
-		"DEBUG":          s.Debug,
-		"API_USER_AGENT": s.UserAgent,
+		"API_KEY":                  s.APIKey,
+		"WEBUI_PASSWORD":           s.WebUIPassword,
+		"DEBUG":                    s.Debug,
+		"API_USER_AGENT":           s.UserAgent,
+		"GEMINI3_MEDIA_RESOLUTION": s.Gemini3MediaResolution,
 	})
 }
 

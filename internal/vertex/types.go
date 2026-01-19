@@ -86,6 +86,7 @@ type GenerationConfig struct {
 	TopK            int             `json:"topK,omitempty"`
 	ThinkingConfig  *ThinkingConfig `json:"thinkingConfig,omitempty"`
 	ImageConfig     *ImageConfig    `json:"imageConfig,omitempty"`
+	MediaResolution string          `json:"mediaResolution,omitempty"`
 }
 
 type ThinkingConfig struct {

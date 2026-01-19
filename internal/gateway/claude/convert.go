@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 
+	"anti2api-golang/refactor/internal/config"
 	gwcommon "anti2api-golang/refactor/internal/gateway/common"
 	"anti2api-golang/refactor/internal/pkg/id"
 	"anti2api-golang/refactor/internal/pkg/modelutil"
@@ -108,6 +109,13 @@ func buildGenerationConfig(req *MessagesRequest) *vertex.GenerationConfig {
 	// Gemini image size virtual models: force imageConfig.imageSize via the model name.
 	if imageSize, _, ok := modelutil.GeminiProImageSizeConfig(model); ok {
 		cfg.ImageConfig = &vertex.ImageConfig{ImageSize: imageSize}
+	}
+
+	// Gemini 3: apply global mediaResolution when configured.
+	if modelutil.IsGemini3(model) {
+		if v, ok := modelutil.ToAPIMediaResolution(config.Get().Gemini3MediaResolution); ok && v != "" {
+			cfg.MediaResolution = v
+		}
 	}
 	return cfg
 }

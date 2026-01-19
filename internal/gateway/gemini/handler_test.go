@@ -1,6 +1,12 @@
 package gemini
 
-import "testing"
+import (
+	"testing"
+
+	"anti2api-golang/refactor/internal/config"
+)
+
+func strptr(s string) *string { return &s }
 
 func TestToVertexGenerationConfig_GeminiProImage_Base_OmitsWhenUnset(t *testing.T) {
 	out := toVertexGenerationConfig("gemini-3-pro-image", nil)
@@ -83,5 +89,83 @@ func TestToVertexGenerationConfig_NonImage_IgnoresImageConfig(t *testing.T) {
 	}
 	if out.ImageConfig != nil {
 		t.Fatalf("expected ImageConfig to be nil for non-image model, got %#v", out.ImageConfig)
+	}
+}
+
+func TestToVertexGenerationConfig_Gemini3_AppliesGlobalMediaResolution_WhenClientUnset(t *testing.T) {
+	c := config.Get()
+	old := c.Gemini3MediaResolution
+	c.Gemini3MediaResolution = "Medium"
+	t.Cleanup(func() { c.Gemini3MediaResolution = old })
+
+	out := toVertexGenerationConfig("gemini-3-pro", nil)
+	if out == nil {
+		t.Fatalf("expected out != nil")
+	}
+	if out.MediaResolution != "MEDIA_RESOLUTION_MEDIUM" {
+		t.Fatalf("mediaResolution mismatch: got %q want %q", out.MediaResolution, "MEDIA_RESOLUTION_MEDIUM")
+	}
+}
+
+func TestToVertexGenerationConfig_Gemini3_ClientMediaResolution_OverridesGlobal(t *testing.T) {
+	c := config.Get()
+	old := c.Gemini3MediaResolution
+	c.Gemini3MediaResolution = "low"
+	t.Cleanup(func() { c.Gemini3MediaResolution = old })
+
+	cfg := &GeminiGenerationConfig{CandidateCount: 1, MediaResolution: strptr("HIGH")}
+	out := toVertexGenerationConfig("gemini-3-pro", cfg)
+	if out == nil {
+		t.Fatalf("expected out != nil")
+	}
+	if out.MediaResolution != "MEDIA_RESOLUTION_HIGH" {
+		t.Fatalf("mediaResolution mismatch: got %q want %q", out.MediaResolution, "MEDIA_RESOLUTION_HIGH")
+	}
+}
+
+func TestToVertexGenerationConfig_Gemini3_ClientMediaResolution_Empty_DisablesGlobal(t *testing.T) {
+	c := config.Get()
+	old := c.Gemini3MediaResolution
+	c.Gemini3MediaResolution = "high"
+	t.Cleanup(func() { c.Gemini3MediaResolution = old })
+
+	cfg := &GeminiGenerationConfig{CandidateCount: 1, MediaResolution: strptr("")}
+	out := toVertexGenerationConfig("gemini-3-pro", cfg)
+	if out == nil {
+		t.Fatalf("expected out != nil")
+	}
+	if out.MediaResolution != "" {
+		t.Fatalf("expected mediaResolution to be empty, got %q", out.MediaResolution)
+	}
+}
+
+func TestToVertexGenerationConfig_Gemini3_ClientMediaResolution_Invalid_DisablesGlobal(t *testing.T) {
+	c := config.Get()
+	old := c.Gemini3MediaResolution
+	c.Gemini3MediaResolution = "low"
+	t.Cleanup(func() { c.Gemini3MediaResolution = old })
+
+	cfg := &GeminiGenerationConfig{CandidateCount: 1, MediaResolution: strptr("ultra_high")}
+	out := toVertexGenerationConfig("gemini-3-pro", cfg)
+	if out == nil {
+		t.Fatalf("expected out != nil")
+	}
+	if out.MediaResolution != "" {
+		t.Fatalf("expected mediaResolution to be empty, got %q", out.MediaResolution)
+	}
+}
+
+func TestToVertexGenerationConfig_NonGemini3_DoesNotApplyGlobalMediaResolution(t *testing.T) {
+	c := config.Get()
+	old := c.Gemini3MediaResolution
+	c.Gemini3MediaResolution = "high"
+	t.Cleanup(func() { c.Gemini3MediaResolution = old })
+
+	out := toVertexGenerationConfig("gemini-2.5-pro", nil)
+	if out == nil {
+		t.Fatalf("expected out != nil")
+	}
+	if out.MediaResolution != "" {
+		t.Fatalf("expected mediaResolution to be empty, got %q", out.MediaResolution)
 	}
 }

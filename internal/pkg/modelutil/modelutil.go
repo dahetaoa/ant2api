@@ -57,6 +57,52 @@ func IsGemini25(model string) bool {
 	return strings.HasPrefix(m, "gemini-2.5-") || strings.HasPrefix(m, "gemini-2.5")
 }
 
+// ValidateMediaResolution 校验并规范化 Gemini 3 的全局 mediaResolution（GenerationConfig.mediaResolution）。
+// 返回值为规范化后的小写字符串；当输入非法时返回 ("", false)。
+// 合法值：
+// - ""（未设置）
+// - "low" / "medium" / "high"
+// - 或对应的枚举名（Protobuf JSON enum）：MEDIA_RESOLUTION_LOW / _MEDIUM / _HIGH（大小写不敏感）
+func ValidateMediaResolution(value string) (string, bool) {
+	v := strings.ToLower(strings.TrimSpace(value))
+	switch v {
+	case "":
+		return "", true
+	case "low", "media_resolution_low":
+		return "low", true
+	case "medium", "media_resolution_medium":
+		return "medium", true
+	case "high", "media_resolution_high":
+		return "high", true
+	default:
+		return "", false
+	}
+}
+
+// ToAPIMediaResolution 将用户友好的分辨率值转换为 Vertex Cloud Code API 期望的枚举字符串。
+// 输入支持：low/medium/high 或 MEDIA_RESOLUTION_LOW/_MEDIUM/_HIGH（大小写不敏感）。
+// 返回值：
+// - "" 表示不写出该字段（使用模型默认）
+// - ok=false 表示输入非法
+func ToAPIMediaResolution(value string) (string, bool) {
+	v, ok := ValidateMediaResolution(value)
+	if !ok {
+		return "", false
+	}
+	switch v {
+	case "":
+		return "", true
+	case "low":
+		return "MEDIA_RESOLUTION_LOW", true
+	case "medium":
+		return "MEDIA_RESOLUTION_MEDIUM", true
+	case "high":
+		return "MEDIA_RESOLUTION_HIGH", true
+	default:
+		return "", false
+	}
+}
+
 // IsClaudeThinking 判断是否为 Claude 的 “thinking” 变体。
 // 兼容诸如 "claude-xxx-thinking-latest" 这类带后缀的名称。
 func IsClaudeThinking(model string) bool {

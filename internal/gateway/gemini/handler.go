@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"anti2api-golang/refactor/internal/config"
 	"anti2api-golang/refactor/internal/credential"
 	gwcommon "anti2api-golang/refactor/internal/gateway/common"
 	"anti2api-golang/refactor/internal/logger"
@@ -39,6 +40,7 @@ type GeminiGenerationConfig struct {
 	TopK            int                `json:"topK,omitempty"`
 	ThinkingConfig  *GeminiThinkingCfg `json:"thinkingConfig,omitempty"`
 	ImageConfig     *GeminiImageCfg    `json:"imageConfig,omitempty"`
+	MediaResolution *string            `json:"mediaResolution,omitempty"`
 }
 
 type GeminiThinkingCfg struct {
@@ -80,6 +82,11 @@ func toVertexGenerationConfig(model string, cfg *GeminiGenerationConfig) *vertex
 			}
 			if isGeminiProImage && forcedImage {
 				out.ImageConfig = &vertex.ImageConfig{ImageSize: forcedImageSize}
+			}
+			if modelutil.IsGemini3(model) {
+				if v, ok := modelutil.ToAPIMediaResolution(config.Get().Gemini3MediaResolution); ok && v != "" {
+					out.MediaResolution = v
+				}
 			}
 			return out
 		}
@@ -166,6 +173,17 @@ func toVertexGenerationConfig(model string, cfg *GeminiGenerationConfig) *vertex
 			if imageSize != "" {
 				out.ImageConfig.ImageSize = imageSize
 			}
+		}
+	}
+
+	if modelutil.IsGemini3(model) {
+		// 客户端 mediaResolution（若提供）优先于全局设置；显式空值/非法值将导致不写出该字段。
+		if cfg.MediaResolution != nil {
+			if v, ok := modelutil.ToAPIMediaResolution(*cfg.MediaResolution); ok && v != "" {
+				out.MediaResolution = v
+			}
+		} else if v, ok := modelutil.ToAPIMediaResolution(config.Get().Gemini3MediaResolution); ok && v != "" {
+			out.MediaResolution = v
 		}
 	}
 

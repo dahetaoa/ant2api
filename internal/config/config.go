@@ -29,8 +29,9 @@ type Config struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 
-	DataDir       string
-	AdminPassword string
+	DataDir                string
+	AdminPassword          string
+	Gemini3MediaResolution string
 }
 
 var (
@@ -50,21 +51,22 @@ func Load() *Config {
 		port := getEnvInt("PORT", 8045)
 
 		cfg = &Config{
-			Host:               getEnv("HOST", "0.0.0.0"),
-			Port:               port,
-			OAuthRedirectPort:  getEnvInt("OAUTH_REDIRECT_PORT", port),
-			UserAgent:          getEnv("API_USER_AGENT", "antigravity/1.11.3 windows/amd64"),
-			TimeoutMs:          getEnvInt("TIMEOUT", 180000),
-			Proxy:              getEnv("PROXY", ""),
-			APIKey:             getEnv("API_KEY", ""),
-			RetryStatusCodes:   getEnvIntSlice("RETRY_STATUS_CODES", []int{429, 500}),
-			RetryMaxAttempts:   getEnvInt("RETRY_MAX_ATTEMPTS", 3),
-			Debug:              getEnv("DEBUG", "off"),
-			EndpointMode:       getEnv("ENDPOINT_MODE", "daily"),
-			GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
-			GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
-			DataDir:            getEnv("DATA_DIR", "./data"),
-			AdminPassword:      getEnv("WEBUI_PASSWORD", ""),
+			Host:                   getEnv("HOST", "0.0.0.0"),
+			Port:                   port,
+			OAuthRedirectPort:      getEnvInt("OAUTH_REDIRECT_PORT", port),
+			UserAgent:              getEnv("API_USER_AGENT", "antigravity/1.11.3 windows/amd64"),
+			TimeoutMs:              getEnvInt("TIMEOUT", 180000),
+			Proxy:                  getEnv("PROXY", ""),
+			APIKey:                 getEnv("API_KEY", ""),
+			RetryStatusCodes:       getEnvIntSlice("RETRY_STATUS_CODES", []int{429, 500}),
+			RetryMaxAttempts:       getEnvInt("RETRY_MAX_ATTEMPTS", 3),
+			Debug:                  getEnv("DEBUG", "off"),
+			EndpointMode:           getEnv("ENDPOINT_MODE", "daily"),
+			GoogleClientID:         getEnv("GOOGLE_CLIENT_ID", ""),
+			GoogleClientSecret:     getEnv("GOOGLE_CLIENT_SECRET", ""),
+			DataDir:                getEnv("DATA_DIR", "./data"),
+			AdminPassword:          getEnv("WEBUI_PASSWORD", ""),
+			Gemini3MediaResolution: getEnv("GEMINI3_MEDIA_RESOLUTION", ""),
 		}
 
 		if cfg.OAuthRedirectPort <= 0 {
