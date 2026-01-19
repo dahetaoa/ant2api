@@ -85,12 +85,18 @@ type GenerationConfig struct {
 	TopP            *float64        `json:"topP,omitempty"`
 	TopK            int             `json:"topK,omitempty"`
 	ThinkingConfig  *ThinkingConfig `json:"thinkingConfig,omitempty"`
+	ImageConfig     *ImageConfig    `json:"imageConfig,omitempty"`
 }
 
 type ThinkingConfig struct {
 	IncludeThoughts bool   `json:"includeThoughts"`
 	ThinkingBudget  int    `json:"thinkingBudget,omitempty"`
 	ThinkingLevel   string `json:"thinkingLevel,omitempty"`
+}
+
+type ImageConfig struct {
+	AspectRatio string `json:"aspectRatio,omitempty"`
+	ImageSize   string `json:"imageSize,omitempty"`
 }
 
 func (t ThinkingConfig) MarshalJSON() ([]byte, error) {

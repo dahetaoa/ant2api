@@ -38,12 +38,18 @@ type GeminiGenerationConfig struct {
 	TopP            *float64           `json:"topP,omitempty"`
 	TopK            int                `json:"topK,omitempty"`
 	ThinkingConfig  *GeminiThinkingCfg `json:"thinkingConfig,omitempty"`
+	ImageConfig     *GeminiImageCfg    `json:"imageConfig,omitempty"`
 }
 
 type GeminiThinkingCfg struct {
 	IncludeThoughts bool   `json:"includeThoughts"`
 	ThinkingBudget  int    `json:"thinkingBudget,omitempty"`
 	ThinkingLevel   string `json:"thinkingLevel,omitempty"`
+}
+
+type GeminiImageCfg struct {
+	AspectRatio string `json:"aspectRatio,omitempty"`
+	ImageSize   string `json:"imageSize,omitempty"`
 }
 
 type GeminiResponse struct {
@@ -56,6 +62,8 @@ func toVertexGenerationConfig(model string, cfg *GeminiGenerationConfig) *vertex
 	isClaude := modelutil.IsClaude(model)
 	isGemini := modelutil.IsGemini(model)
 	forcedThinking, forced := modelutil.ForcedThinkingConfig(model)
+	isGeminiProImage := modelutil.IsGeminiProImage(model)
+	forcedImageSize, _, forcedImage := modelutil.GeminiProImageSizeConfig(model)
 
 	if cfg == nil {
 		if isClaude {
@@ -69,6 +77,9 @@ func toVertexGenerationConfig(model string, cfg *GeminiGenerationConfig) *vertex
 			out := &vertex.GenerationConfig{CandidateCount: 1, MaxOutputTokens: modelutil.GeminiMaxOutputTokens}
 			if forced {
 				out.ThinkingConfig = forcedThinking
+			}
+			if isGeminiProImage && forcedImage {
+				out.ImageConfig = &vertex.ImageConfig{ImageSize: forcedImageSize}
 			}
 			return out
 		}
@@ -132,6 +143,28 @@ func toVertexGenerationConfig(model string, cfg *GeminiGenerationConfig) *vertex
 				out.ThinkingConfig.ThinkingBudget = maxBudget
 			} else if out.MaxOutputTokens <= out.ThinkingConfig.ThinkingBudget {
 				out.MaxOutputTokens = out.ThinkingConfig.ThinkingBudget + modelutil.ThinkingMaxOutputTokensOverheadTokens
+			}
+		}
+	}
+
+	if isGeminiProImage {
+		var aspectRatio string
+		var imageSize string
+		if cfg.ImageConfig != nil {
+			aspectRatio = strings.TrimSpace(cfg.ImageConfig.AspectRatio)
+			imageSize = strings.TrimSpace(cfg.ImageConfig.ImageSize)
+		}
+		if forcedImage {
+			imageSize = forcedImageSize
+		}
+
+		if aspectRatio != "" || imageSize != "" {
+			out.ImageConfig = &vertex.ImageConfig{}
+			if aspectRatio != "" {
+				out.ImageConfig.AspectRatio = aspectRatio
+			}
+			if imageSize != "" {
+				out.ImageConfig.ImageSize = imageSize
 			}
 		}
 	}

@@ -212,6 +212,11 @@ func buildGenerationConfig(req *ChatRequest) *vertex.GenerationConfig {
 			cfg.MaxOutputTokens = cfg.ThinkingConfig.ThinkingBudget + modelutil.ThinkingMaxOutputTokensOverheadTokens
 		}
 	}
+
+	// Gemini image size virtual models: force imageConfig.imageSize via the model name.
+	if imageSize, _, ok := modelutil.GeminiProImageSizeConfig(model); ok {
+		cfg.ImageConfig = &vertex.ImageConfig{ImageSize: imageSize}
+	}
 	return cfg
 }
 

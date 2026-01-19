@@ -32,6 +32,9 @@ func BackendModelID(model string) string {
 	if _, backendModel, ok := ClaudeOpus45ThinkingConfig(model); ok {
 		return backendModel
 	}
+	if _, backendModel, ok := GeminiProImageSizeConfig(model); ok {
+		return backendModel
+	}
 	// 默认仅做 canonical 化（去掉 models/ 等）。
 	return CanonicalModelID(model)
 }
@@ -198,10 +201,11 @@ func ThinkingConfigFromGemini(model string, includeThoughts bool, thinkingBudget
 
 // BuildSortedModelIDs 将 Vertex 返回的 models map key 规范化、去重、注入虚拟模型，并按字典序排序返回。
 func BuildSortedModelIDs(models map[string]any) []string {
-	ids := make([]string, 0, len(models)+2)
-	seen := make(map[string]struct{}, len(models)+2)
+	ids := make([]string, 0, len(models)+5)
+	seen := make(map[string]struct{}, len(models)+5)
 
 	hasGemini3Flash := false
+	hasGemini3ProImage := false
 	hasClaudeOpus45 := false
 	hasClaudeOpus45Thinking := false
 
@@ -212,6 +216,9 @@ func BuildSortedModelIDs(models map[string]any) []string {
 		}
 		if strings.EqualFold(idv, "gemini-3-flash") {
 			hasGemini3Flash = true
+		}
+		if strings.EqualFold(idv, "gemini-3-pro-image") {
+			hasGemini3ProImage = true
 		}
 		lower := strings.ToLower(idv)
 		if strings.HasPrefix(lower, "claude-opus-4-5-thinking") {
@@ -232,6 +239,14 @@ func BuildSortedModelIDs(models map[string]any) []string {
 		const virtual = "gemini-3-flash-thinking"
 		if _, ok := seen[virtual]; !ok {
 			ids = append(ids, virtual)
+		}
+	}
+	// Virtual model injection: add gemini-3-pro-image-*k variants when gemini-3-pro-image exists.
+	if hasGemini3ProImage {
+		for _, virtual := range []string{"gemini-3-pro-image-1k", "gemini-3-pro-image-2k", "gemini-3-pro-image-4k"} {
+			if _, ok := seen[virtual]; !ok {
+				ids = append(ids, virtual)
+			}
 		}
 	}
 	// Virtual model injection: add claude-opus-4-5 when only claude-opus-4-5-thinking* exists.
