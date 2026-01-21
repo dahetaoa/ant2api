@@ -83,7 +83,7 @@ func toVertexGenerationConfig(model string, cfg *GeminiGenerationConfig) *vertex
 			if isGeminiProImage && forcedImage {
 				out.ImageConfig = &vertex.ImageConfig{ImageSize: forcedImageSize}
 			}
-			if modelutil.IsGemini3(model) {
+			if modelutil.IsGemini3(model) && !modelutil.IsImageModel(model) {
 				if v, ok := modelutil.ToAPIMediaResolution(config.Get().Gemini3MediaResolution); ok && v != "" {
 					out.MediaResolution = v
 				}
@@ -176,7 +176,7 @@ func toVertexGenerationConfig(model string, cfg *GeminiGenerationConfig) *vertex
 		}
 	}
 
-	if modelutil.IsGemini3(model) {
+	if modelutil.IsGemini3(model) && !modelutil.IsImageModel(model) {
 		// 客户端 mediaResolution（若提供）优先于全局设置；显式空值/非法值将导致不写出该字段。
 		if cfg.MediaResolution != nil {
 			if v, ok := modelutil.ToAPIMediaResolution(*cfg.MediaResolution); ok && v != "" {

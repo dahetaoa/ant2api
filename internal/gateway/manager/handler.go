@@ -451,52 +451,10 @@ func HandleOAuthURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	redirectURI := fmt.Sprintf("http://localhost:%d/oauth-callback", config.Get().OAuthRedirectPort)
+	redirectURI := fmt.Sprintf("http://localhost:%d/oauth-callback", config.Get().Port)
 	authURL := credential.BuildAuthURL(redirectURI, state)
 
 	writeJSON(w, http.StatusOK, map[string]any{"url": authURL})
-}
-
-func HandleOAuthCallback(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		http.Error(w, "不支持的请求方法", http.StatusMethodNotAllowed)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(`<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OAuth 授权回调</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-50 text-slate-900 min-h-screen flex items-center justify-center p-6">
-  <div class="w-full max-w-xl bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-    <h1 class="text-xl font-bold text-slate-900 mb-2">授权回调已到达本地</h1>
-    <p class="text-sm text-slate-600 mb-4">请复制当前浏览器地址栏中的完整 URL（包含 code 与 state），回到管理面板粘贴并提交。</p>
-    <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-600 break-all" id="fullUrl"></div>
-    <div class="flex gap-3 mt-4">
-      <button class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700" id="copyBtn">一键复制完整 URL</button>
-      <a class="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50" href="/">返回管理面板</a>
-    </div>
-    <p class="text-xs text-slate-400 mt-4">提示：本页面不会自动提交授权信息，必须手动复制 URL 回到管理面板。</p>
-  </div>
-  <script>
-    const full = window.location.href;
-    document.getElementById('fullUrl').textContent = full;
-    document.getElementById('copyBtn').addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(full);
-        alert('已复制');
-      } catch (e) {
-        alert('复制失败，请手动复制地址栏');
-      }
-    });
-  </script>
-</body>
-</html>`))
 }
 
 type oauthParseURLRequest struct {
@@ -538,7 +496,7 @@ func HandleOAuthParseURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	redirectURI := fmt.Sprintf("http://localhost:%d/oauth-callback", config.Get().OAuthRedirectPort)
+	redirectURI := fmt.Sprintf("http://localhost:%d/oauth-callback", config.Get().Port)
 
 	logger.Info("开始 OAuth 交换 Token...")
 	tokenResp, err := credential.ExchangeCodeForToken(code, redirectURI)

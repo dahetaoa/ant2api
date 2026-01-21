@@ -107,6 +107,37 @@ func TestToVertexGenerationConfig_Gemini3_AppliesGlobalMediaResolution_WhenClien
 	}
 }
 
+func TestToVertexGenerationConfig_Gemini3Image_DoesNotApplyGlobalMediaResolution(t *testing.T) {
+	c := config.Get()
+	old := c.Gemini3MediaResolution
+	c.Gemini3MediaResolution = "high"
+	t.Cleanup(func() { c.Gemini3MediaResolution = old })
+
+	out := toVertexGenerationConfig("gemini-3-pro-image", nil)
+	if out == nil {
+		t.Fatalf("expected out != nil")
+	}
+	if out.MediaResolution != "" {
+		t.Fatalf("expected mediaResolution to be empty for image model, got %q", out.MediaResolution)
+	}
+}
+
+func TestToVertexGenerationConfig_Gemini3Image_IgnoresClientMediaResolution(t *testing.T) {
+	c := config.Get()
+	old := c.Gemini3MediaResolution
+	c.Gemini3MediaResolution = "low"
+	t.Cleanup(func() { c.Gemini3MediaResolution = old })
+
+	cfg := &GeminiGenerationConfig{CandidateCount: 1, MediaResolution: strptr("HIGH")}
+	out := toVertexGenerationConfig("gemini-3-pro-image", cfg)
+	if out == nil {
+		t.Fatalf("expected out != nil")
+	}
+	if out.MediaResolution != "" {
+		t.Fatalf("expected mediaResolution to be empty for image model, got %q", out.MediaResolution)
+	}
+}
+
 func TestToVertexGenerationConfig_Gemini3_ClientMediaResolution_OverridesGlobal(t *testing.T) {
 	c := config.Get()
 	old := c.Gemini3MediaResolution

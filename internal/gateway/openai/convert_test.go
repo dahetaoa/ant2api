@@ -47,6 +47,22 @@ func TestBuildGenerationConfig_Gemini3_AppliesGlobalMediaResolution(t *testing.T
 	}
 }
 
+func TestBuildGenerationConfig_Gemini3Image_DoesNotApplyGlobalMediaResolution(t *testing.T) {
+	c := config.Get()
+	old := c.Gemini3MediaResolution
+	c.Gemini3MediaResolution = "high"
+	t.Cleanup(func() { c.Gemini3MediaResolution = old })
+
+	req := &ChatRequest{Model: "gemini-3-pro-image"}
+	cfg := buildGenerationConfig(req)
+	if cfg == nil {
+		t.Fatalf("expected cfg != nil")
+	}
+	if cfg.MediaResolution != "" {
+		t.Fatalf("expected mediaResolution to be empty for image model, got %q", cfg.MediaResolution)
+	}
+}
+
 func TestBuildGenerationConfig_NonGemini3_DoesNotApplyGlobalMediaResolution(t *testing.T) {
 	c := config.Get()
 	old := c.Gemini3MediaResolution

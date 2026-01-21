@@ -11,8 +11,6 @@ type Config struct {
 	Host string
 	Port int
 
-	OAuthRedirectPort int
-
 	UserAgent string
 	TimeoutMs int
 	Proxy     string
@@ -53,7 +51,6 @@ func Load() *Config {
 		cfg = &Config{
 			Host:                   getEnv("HOST", "0.0.0.0"),
 			Port:                   port,
-			OAuthRedirectPort:      getEnvInt("OAUTH_REDIRECT_PORT", port),
 			UserAgent:              getEnv("API_USER_AGENT", "antigravity/1.11.3 windows/amd64"),
 			TimeoutMs:              getEnvInt("TIMEOUT", 180000),
 			Proxy:                  getEnv("PROXY", ""),
@@ -67,10 +64,6 @@ func Load() *Config {
 			DataDir:                getEnv("DATA_DIR", "./data"),
 			AdminPassword:          getEnv("WEBUI_PASSWORD", ""),
 			Gemini3MediaResolution: getEnv("GEMINI3_MEDIA_RESOLUTION", ""),
-		}
-
-		if cfg.OAuthRedirectPort <= 0 {
-			cfg.OAuthRedirectPort = cfg.Port
 		}
 
 		for i, arg := range os.Args[1:] {

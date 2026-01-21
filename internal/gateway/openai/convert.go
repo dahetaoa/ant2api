@@ -163,6 +163,7 @@ func buildGenerationConfig(req *ChatRequest) *vertex.GenerationConfig {
 	model := strings.TrimSpace(req.Model)
 	isClaude := modelutil.IsClaude(model)
 	isGemini := modelutil.IsGemini(model)
+	isImageModel := modelutil.IsImageModel(model)
 	cfg := &vertex.GenerationConfig{CandidateCount: 1}
 	// Gemini models: maxOutputTokens is fixed at 65535.
 	if isGemini {
@@ -220,7 +221,7 @@ func buildGenerationConfig(req *ChatRequest) *vertex.GenerationConfig {
 	}
 
 	// Gemini 3: apply global mediaResolution when configured.
-	if modelutil.IsGemini3(model) {
+	if modelutil.IsGemini3(model) && !isImageModel {
 		if v, ok := modelutil.ToAPIMediaResolution(config.Get().Gemini3MediaResolution); ok && v != "" {
 			cfg.MediaResolution = v
 		}

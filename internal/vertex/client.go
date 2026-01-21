@@ -37,11 +37,16 @@ func (e *APIError) Error() string {
 func NewClient() *Client {
 	cfg := config.Get()
 
+	timeout := time.Duration(cfg.TimeoutMs) * time.Millisecond
+	if cfg.TimeoutMs <= 0 {
+		timeout = 0
+	}
+
 	transport := &http.Transport{
 		MaxIdleConns:          100,
 		MaxIdleConnsPerHost:   10,
 		IdleConnTimeout:       90 * time.Second,
-		ResponseHeaderTimeout: 30 * time.Second,
+		ResponseHeaderTimeout: timeout,
 		ForceAttemptHTTP2:     false,
 	}
 
@@ -55,7 +60,7 @@ func NewClient() *Client {
 	return &Client{
 		httpClient: &http.Client{
 			Transport: transport,
-			Timeout:   time.Duration(cfg.TimeoutMs) * time.Millisecond,
+			Timeout:   timeout,
 		},
 		config: cfg,
 	}

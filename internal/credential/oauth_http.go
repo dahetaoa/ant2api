@@ -18,11 +18,16 @@ func getOAuthHTTPClient() *http.Client {
 	oauthHTTPClientOnce.Do(func() {
 		cfg := config.Get()
 
+		timeout := time.Duration(cfg.TimeoutMs) * time.Millisecond
+		if cfg.TimeoutMs <= 0 {
+			timeout = 0
+		}
+
 		transport := &http.Transport{
 			MaxIdleConns:          100,
 			MaxIdleConnsPerHost:   10,
 			IdleConnTimeout:       90 * time.Second,
-			ResponseHeaderTimeout: 30 * time.Second,
+			ResponseHeaderTimeout: timeout,
 			ForceAttemptHTTP2:     false,
 		}
 
@@ -34,7 +39,7 @@ func getOAuthHTTPClient() *http.Client {
 
 		oauthHTTPClient = &http.Client{
 			Transport: transport,
-			Timeout:   time.Duration(cfg.TimeoutMs) * time.Millisecond,
+			Timeout:   timeout,
 		}
 	})
 

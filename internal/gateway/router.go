@@ -43,9 +43,6 @@ func NewRouter() http.Handler {
 	})
 	mux.HandleFunc("/logout", manager.HandleLogout)
 
-	// Public OAuth callback (no auth)
-	mux.HandleFunc("/oauth-callback", allowMethods(manager.HandleOAuthCallback, http.MethodGet, http.MethodHead))
-
 	// Protected Manager Routes
 	// We use a separate mux for manager routes to wrap them in ManagerAuth
 	// However, since we want to mount it at root "/", we must be careful not to shadow /v1 routes
@@ -79,18 +76,7 @@ func NewRouter() http.Handler {
 
 	h := middleware.Recovery(mux)
 	h = middleware.Logging(h)
-
-	base := h
-	authed := middleware.Auth(base)
-	// OAuth callback 必须公开可访问：即使配置了 API_KEY，也不应该拦截。
-	h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/oauth-callback" {
-			base.ServeHTTP(w, r)
-			return
-		}
-		authed.ServeHTTP(w, r)
-	})
-
+	h = middleware.Auth(h)
 	return h
 }
 
