@@ -13,6 +13,8 @@ import (
 	"anti2api-golang/refactor/internal/vertex"
 )
 
+const imageModelFallbackSignature = "context_engineering_is_the_way_to_go"
+
 func ToVertexRequest(req *ChatRequest, account *gwcommon.AccountContext) (*vertex.Request, string, error) {
 	modelName := req.Model
 	model := strings.TrimSpace(req.Model)
@@ -63,7 +65,7 @@ func toVertexContents(req *ChatRequest, requestID string) []vertex.Content {
 		case "system":
 			continue
 		case "user":
-			out = append(out, vertex.Content{Role: "user", Parts: extractUserParts(m.Content)})
+			out = append(out, vertex.Content{Role: "user", Parts: extractUserParts(m.Content, model)})
 		case "assistant":
 			parts := make([]vertex.Part, 0, 2+len(m.ToolCalls))
 			thinkingText := strings.TrimSpace(m.Reasoning)
@@ -105,7 +107,7 @@ func toVertexContents(req *ChatRequest, requestID string) []vertex.Content {
 			}
 
 			if t := gwcommon.ExtractTextFromContent(m.Content, "\n", false); t != "" {
-				images := parseMarkdownImages(t)
+				images := parseMarkdownImages(t, model)
 				if len(images) == 0 {
 					parts = append(parts, vertex.Part{Text: t})
 				} else {
@@ -238,8 +240,9 @@ func toVertexTools(tools []Tool) []vertex.Tool {
 	return out
 }
 
-func extractUserParts(content any) []vertex.Part {
+func extractUserParts(content any, model string) []vertex.Part {
 	var out []vertex.Part
+	isImageModel := modelutil.IsImageModel(model)
 	switch v := content.(type) {
 	case string:
 		if v != "" {
@@ -271,6 +274,8 @@ func extractUserParts(content any) []vertex.Part {
 					sig := ""
 					if e, ok := signature.GetManager().LookupByToolCallID(imageKey); ok {
 						sig = e.Signature
+					} else if isImageModel {
+						sig = imageModelFallbackSignature
 					}
 					out = append(out, vertex.Part{InlineData: inline, ThoughtSignature: sig})
 				}
@@ -290,12 +295,13 @@ type markdownImage struct {
 	end       int
 }
 
-func parseMarkdownImages(content string) []markdownImage {
+func parseMarkdownImages(content string, model string) []markdownImage {
 	matches := markdownImageRe.FindAllStringSubmatchIndex(content, -1)
 	if len(matches) == 0 {
 		return nil
 	}
 
+	isImageModel := modelutil.IsImageModel(model)
 	out := make([]markdownImage, 0, len(matches))
 	for _, m := range matches {
 		if len(m) != 6 {
@@ -311,6 +317,8 @@ func parseMarkdownImages(content string) []markdownImage {
 		sig := ""
 		if e, ok := signature.GetManager().LookupByToolCallID(imageKey); ok {
 			sig = e.Signature
+		} else if isImageModel {
+			sig = imageModelFallbackSignature
 		}
 
 		out = append(out, markdownImage{

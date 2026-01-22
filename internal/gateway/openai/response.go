@@ -83,6 +83,7 @@ func ToChatCompletion(resp *vertex.Response, model string, requestID string) *Ch
 
 	sigMgr := signature.GetManager()
 	isClaudeThinking := modelutil.IsClaudeThinking(model)
+	isImageModel := modelutil.IsImageModel(model)
 	pendingSig := ""
 	var pendingReasoning strings.Builder
 
@@ -106,7 +107,9 @@ func ToChatCompletion(resp *vertex.Response, model string, requestID string) *Ch
 				imageKey = imageKey[:20]
 			}
 			if p.ThoughtSignature != "" {
-				sigMgr.Save(requestID, imageKey, p.ThoughtSignature, pendingReasoning.String(), model)
+				if !isImageModel {
+					sigMgr.Save(requestID, imageKey, p.ThoughtSignature, pendingReasoning.String(), model)
+				}
 				pendingReasoning.Reset()
 			}
 			imageMarkdown := fmt.Sprintf("![image](data:%s;base64,%s)", p.InlineData.MimeType, p.InlineData.Data)

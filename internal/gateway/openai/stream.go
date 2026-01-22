@@ -55,6 +55,7 @@ func (sw *StreamWriter) ProcessPart(part StreamDataPart) error {
 	defer sw.mu.Unlock()
 
 	isClaudeThinking := modelutil.IsClaudeThinking(sw.model)
+	isImageModel := modelutil.IsImageModel(sw.model)
 	if isClaudeThinking && part.Thought && part.ThoughtSignature != "" {
 		// Claude thinking: bind the signature to the first tool call that follows this signature block.
 		sw.pendingSig = part.ThoughtSignature
@@ -73,7 +74,9 @@ func (sw *StreamWriter) ProcessPart(part StreamDataPart) error {
 			imageKey = imageKey[:20]
 		}
 		if part.ThoughtSignature != "" {
-			signature.GetManager().Save(sw.requestID, imageKey, part.ThoughtSignature, sw.pendingReasoning.String(), sw.model)
+			if !isImageModel {
+				signature.GetManager().Save(sw.requestID, imageKey, part.ThoughtSignature, sw.pendingReasoning.String(), sw.model)
+			}
 			sw.pendingReasoning.Reset()
 		}
 		imageMarkdown := fmt.Sprintf("![image](data:%s;base64,%s)", part.InlineData.MimeType, part.InlineData.Data)
