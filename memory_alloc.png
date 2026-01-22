@@ -1,0 +1,3 @@
+Fetching profile over HTTP from http://localhost:6060/debug/pprof/heap
+[0;31mSaved profile in /root/pprof/pprof.server.alloc_objects.alloc_space.inuse_objects.inuse_space.005.pb.gz
+[0mfailed to execute dot. Is Graphviz installed? Error: exec: "dot": executable file not found in $PATH

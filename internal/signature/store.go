@@ -3,6 +3,8 @@ package signature
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -61,8 +63,9 @@ func (s *Store) Stop() {
 
 func (s *Store) Enqueue(e Entry) {
 	select {
+	case <-s.stopCh:
+		return
 	case s.queue <- e:
-	default:
 	}
 }
 
@@ -83,20 +86,50 @@ func (s *Store) loop() {
 	defer ticker.Stop()
 
 	var batch []Entry
+	flushBlocked := false
 	flush := func() {
 		if len(batch) == 0 {
+			flushBlocked = false
 			return
 		}
-		_ = s.appendJSONL(batch)
-		batch = batch[:0]
+
+		persisted, err := s.appendJSONL(batch)
+		if persisted > 0 {
+			clear(batch[:persisted])
+			batch = batch[persisted:]
+			if len(batch) == 0 {
+				batch = nil
+			}
+		}
+
+		if err != nil {
+			flushBlocked = true
+			return
+		}
+		flushBlocked = false
 	}
 
 	for {
+		readCh := s.queue
+		if flushBlocked {
+			readCh = nil
+		}
 		select {
 		case <-s.stopCh:
-			flush()
-			return
-		case e := <-s.queue:
+			for {
+				select {
+				case e := <-s.queue:
+					batch = append(batch, e)
+				default:
+					if len(batch) > 0 {
+						_, _ = s.appendJSONL(batch)
+						clear(batch)
+						batch = nil
+					}
+					return
+				}
+			}
+		case e := <-readCh:
 			batch = append(batch, e)
 			if len(batch) >= 256 {
 				flush()
@@ -107,46 +140,65 @@ func (s *Store) loop() {
 	}
 }
 
-func (s *Store) appendJSONL(entries []Entry) error {
+func marshalEntryJSON(e Entry) ([]byte, error) {
+	b, err := jsonpkg.Marshal(e)
+	if err == nil {
+		return b, nil
+	}
+	b, err2 := json.Marshal(e)
+	if err2 == nil {
+		return b, nil
+	}
+	return nil, errors.Join(err, err2)
+}
+
+func (s *Store) appendJSONL(entries []Entry) (int, error) {
 	if len(entries) == 0 {
-		return nil
+		return 0, nil
 	}
 
 	dir := filepath.Join(s.dataDir, "signatures")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
+		return 0, err
 	}
 
 	file := filepath.Join(dir, time.Now().Format("2006-01-02")+".jsonl")
 	f, err := os.OpenFile(file, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer f.Close()
 
 	fi, err := f.Stat()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	w := bufio.NewWriterSize(f, 64*1024)
 	baseOffset := fi.Size()
 	var written int64
-	var persisted []EntryIndex
+	persisted := make([]EntryIndex, 0, len(entries))
+	var writeErr error
 
 	for _, e := range entries {
-		b, err := jsonpkg.Marshal(e)
+		b, err := marshalEntryJSON(e)
 		if err != nil {
-			continue
+			writeErr = err
+			break
 		}
+
 		offset := baseOffset + written
-		if _, err := w.Write(b); err != nil {
-			return err
+		b = append(b, '\n')
+		n, err := f.Write(b)
+		if err != nil || n != len(b) {
+			_ = f.Truncate(offset)
+			if err != nil {
+				writeErr = err
+			} else {
+				writeErr = io.ErrShortWrite
+			}
+			break
 		}
-		if err := w.WriteByte('\n'); err != nil {
-			return err
-		}
-		written += int64(len(b) + 1)
+		written += int64(n)
 
 		persisted = append(persisted, EntryIndex{
 			RequestID:  e.RequestID,
@@ -159,10 +211,6 @@ func (s *Store) appendJSONL(entries []Entry) error {
 		})
 	}
 
-	if err := w.Flush(); err != nil {
-		return err
-	}
-
 	for _, idx := range persisted {
 		s.cache.Put(idx)
 		key := idx.Key()
@@ -170,14 +218,21 @@ func (s *Store) appendJSONL(entries []Entry) error {
 			continue
 		}
 		s.hotMu.Lock()
-		delete(s.hotByKey, key)
-		if idx.ToolCallID != "" {
-			delete(s.hotByToolCall, idx.ToolCallID)
+		if cur, ok := s.hotByKey[key]; ok && cur.CreatedAt.Equal(idx.CreatedAt) {
+			delete(s.hotByKey, key)
+			if idx.ToolCallID != "" {
+				if mappedKey, ok := s.hotByToolCall[idx.ToolCallID]; ok && mappedKey == key {
+					delete(s.hotByToolCall, idx.ToolCallID)
+				}
+			}
 		}
 		s.hotMu.Unlock()
 	}
 
-	return nil
+	if writeErr != nil {
+		return len(persisted), writeErr
+	}
+	return len(persisted), nil
 }
 
 func (s *Store) LoadRecent(days int) {
