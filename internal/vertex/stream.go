@@ -70,7 +70,6 @@ func ParseStreamWithResult(resp *http.Response, receiver func(data *StreamData) 
 
 	buildMerged := logger.IsBackendLogEnabled()
 
-	var rawChunks []map[string]any
 	var mergedParts []any
 	var lastFinishReason string
 	var lastUsage any
@@ -100,9 +99,7 @@ func ParseStreamWithResult(resp *http.Response, receiver func(data *StreamData) 
 
 		var rawChunk map[string]any
 		if buildMerged {
-			if err := jsonpkg.UnmarshalString(jsonData, &rawChunk); err == nil {
-				rawChunks = append(rawChunks, rawChunk)
-			}
+			_ = jsonpkg.UnmarshalString(jsonData, &rawChunk)
 		}
 
 		var data StreamData
@@ -171,7 +168,6 @@ func ParseStreamWithResult(resp *http.Response, receiver func(data *StreamData) 
 	result.Text = textBuilder.String()
 	result.Thinking = thinkingBuilder.String()
 	if buildMerged {
-		result.RawChunks = rawChunks
 		result.MergedResponse = map[string]any{
 			"response": map[string]any{
 				"candidates": []any{

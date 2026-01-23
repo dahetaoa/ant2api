@@ -94,7 +94,9 @@ func (c *Client) SendRequest(ctx context.Context, req *Request, accessToken stri
 		return nil, err
 	}
 
-	logger.BackendRequest(http.MethodPost, reqURL, body)
+	if logger.IsBackendLogEnabled() {
+		logger.BackendRequest(http.MethodPost, reqURL, body)
+	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(body))
 	if err != nil {
@@ -128,18 +130,25 @@ func (c *Client) SendRequest(ctx context.Context, req *Request, accessToken stri
 	if err != nil {
 		return nil, err
 	}
-	logger.BackendResponse(resp.StatusCode, time.Since(startTime), string(respBody))
 
 	if resp.StatusCode != http.StatusOK {
+		if logger.IsBackendLogEnabled() {
+			logger.BackendResponse(resp.StatusCode, time.Since(startTime), string(respBody))
+		}
 		return nil, ExtractErrorDetails(resp, respBody)
 	}
 
 	var out Response
 	if err := jsonpkg.Unmarshal(respBody, &out); err != nil {
+		if logger.IsBackendLogEnabled() {
+			logger.BackendResponse(resp.StatusCode, time.Since(startTime), string(respBody))
+		}
 		return nil, err
 	}
 
-	logger.BackendResponse(resp.StatusCode, time.Since(startTime), &out)
+	if logger.IsBackendLogEnabled() {
+		logger.BackendResponse(resp.StatusCode, time.Since(startTime), &out)
+	}
 
 	return &out, nil
 }
@@ -153,7 +162,9 @@ func (c *Client) SendStreamRequest(ctx context.Context, req *Request, accessToke
 		return nil, err
 	}
 
-	logger.BackendRequest(http.MethodPost, reqURL, body)
+	if logger.IsBackendLogEnabled() {
+		logger.BackendRequest(http.MethodPost, reqURL, body)
+	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(body))
 	if err != nil {
@@ -184,7 +195,9 @@ func (c *Client) SendStreamRequest(ctx context.Context, req *Request, accessToke
 			reader = gzReader
 		}
 		respBody, _ := io.ReadAll(reader)
-		logger.BackendResponse(resp.StatusCode, time.Since(startTime), string(respBody))
+		if logger.IsBackendLogEnabled() {
+			logger.BackendResponse(resp.StatusCode, time.Since(startTime), string(respBody))
+		}
 		return nil, ExtractErrorDetails(resp, respBody)
 	}
 
@@ -349,7 +362,9 @@ func FetchAvailableModels(ctx context.Context, project, accessToken string) (*Av
 			httpReq.Header.Add(key, value)
 		}
 	}
-	logger.BackendRequest(httpReq.Method, httpReq.URL.String(), body)
+	if logger.IsBackendLogEnabled() {
+		logger.BackendRequest(httpReq.Method, httpReq.URL.String(), body)
+	}
 
 	startTime := time.Now()
 	resp, err := client.httpClient.Do(httpReq)
@@ -372,16 +387,23 @@ func FetchAvailableModels(ctx context.Context, project, accessToken string) (*Av
 	if err != nil {
 		return nil, err
 	}
-	logger.BackendResponse(resp.StatusCode, time.Since(startTime), string(respBody))
 
 	if resp.StatusCode != http.StatusOK {
+		if logger.IsBackendLogEnabled() {
+			logger.BackendResponse(resp.StatusCode, time.Since(startTime), string(respBody))
+		}
 		return nil, ExtractErrorDetails(resp, respBody)
 	}
 
 	var out AvailableModelsResponse
 	if err := jsonpkg.Unmarshal(respBody, &out); err != nil {
+		if logger.IsBackendLogEnabled() {
+			logger.BackendResponse(resp.StatusCode, time.Since(startTime), string(respBody))
+		}
 		return nil, err
 	}
-	logger.BackendResponse(resp.StatusCode, time.Since(startTime), &out)
+	if logger.IsBackendLogEnabled() {
+		logger.BackendResponse(resp.StatusCode, time.Since(startTime), &out)
+	}
 	return &out, nil
 }

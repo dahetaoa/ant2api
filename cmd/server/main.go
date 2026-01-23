@@ -8,17 +8,33 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
 	"anti2api-golang/refactor/internal/config"
-	"anti2api-golang/refactor/internal/logger"
 	"anti2api-golang/refactor/internal/credential"
 	"anti2api-golang/refactor/internal/gateway"
+	"anti2api-golang/refactor/internal/logger"
 )
+
+func init() {
+	// 设置更激进的 GC 策略，减少内存占用
+	// GOGC=50 意味着堆增长 50% 时触发 GC (默认是 100%)
+	debug.SetGCPercent(50)
+}
 
 func main() {
 	cfg := config.Get()
+
+	// 启动内存归还协程：每 30 秒将空闲内存归还给操作系统
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			debug.FreeOSMemory()
+		}
+	}()
 
 	logger.Init()
 	_ = credential.GetStore()

@@ -2,6 +2,7 @@ package logger
 
 import (
 	"anti2api-golang/refactor/internal/config"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -259,13 +260,51 @@ func printJSON(v any) {
 	if currentLogLevel == LogOff {
 		return
 	}
-	sanitized := sanitizeJSONForLog(v)
-	jsonBytes, err := json.MarshalIndent(sanitized, "", "  ")
+
+	switch v.(type) {
+	case map[string]any, []any, string,
+		nil, bool,
+		float64, float32,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64:
+		sanitized := sanitizeJSONForLog(v)
+		jsonBytes, err := json.MarshalIndent(sanitized, "", "  ")
+		if err != nil {
+			fmt.Printf("%v\n", v)
+			return
+		}
+		fmt.Println(string(jsonBytes))
+		return
+	}
+
+	raw, err := json.Marshal(v)
 	if err != nil {
 		fmt.Printf("%v\n", v)
 		return
 	}
-	fmt.Println(string(jsonBytes))
+
+	if shouldSanitizeMarshaledJSON(raw) {
+		var decoded any
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			fmt.Printf("%v\n", v)
+			return
+		}
+		sanitized := sanitizeJSONForLog(decoded)
+		jsonBytes, err := json.MarshalIndent(sanitized, "", "  ")
+		if err != nil {
+			fmt.Printf("%v\n", v)
+			return
+		}
+		fmt.Println(string(jsonBytes))
+		return
+	}
+
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, raw, "", "  "); err != nil {
+		fmt.Printf("%v\n", v)
+		return
+	}
+	fmt.Println(buf.String())
 }
 
 func formatRawJSON(rawJSON []byte) string {
@@ -371,6 +410,11 @@ func sanitizeJSONForLog(v any) any {
 }
 
 func sanitizeJSONForLogContext(v any, inInlineData bool) any {
+	sanitized, _ := sanitizeJSONForLogContextInner(v, inInlineData)
+	return sanitized
+}
+
+func sanitizeJSONForLogContextInner(v any, inInlineData bool) (any, bool) {
 	switch val := v.(type) {
 	case map[string]any:
 		isSourceBase64Context := false
@@ -378,63 +422,131 @@ func sanitizeJSONForLogContext(v any, inInlineData bool) any {
 			isSourceBase64Context = true
 		}
 
-		out := make(map[string]any, len(val))
+		var out map[string]any
 		for k, child := range val {
-			if k == "inlineData" {
-				out[k] = sanitizeJSONForLogContext(child, true)
+			var sanitized any
+			var changed bool
+
+			switch {
+			case k == "inlineData":
+				sanitized, changed = sanitizeJSONForLogContextInner(child, true)
+			case k == "data" && (inInlineData || isSourceBase64Context):
+				if s, ok := child.(string); ok {
+					truncated := truncateBase64Maybe(s, true)
+					sanitized = truncated
+					changed = truncated != s
+				} else {
+					sanitized, changed = sanitizeJSONForLogContextInner(child, inInlineData)
+				}
+			case k == "url":
+				if s, ok := child.(string); ok && strings.Contains(s, ";base64,") && len(s) > 100 {
+					truncated := truncateBase64Maybe(s, true)
+					sanitized = truncated
+					changed = truncated != s
+				} else {
+					sanitized, changed = sanitizeJSONForLogContextInner(child, inInlineData)
+				}
+			case k == "content":
+				if s, ok := child.(string); ok && strings.Contains(s, "![image](data:") && strings.Contains(s, ";base64,") && len(s) > 100 {
+					truncated := truncateBase64Maybe(s, true)
+					sanitized = truncated
+					changed = truncated != s
+				} else {
+					sanitized, changed = sanitizeJSONForLogContextInner(child, inInlineData)
+				}
+			default:
+				sanitized, changed = sanitizeJSONForLogContextInner(child, inInlineData)
+			}
+
+			if out != nil {
+				out[k] = sanitized
 				continue
 			}
-			if k == "data" && (inInlineData || isSourceBase64Context) {
-				if s, ok := child.(string); ok {
-					out[k] = truncateBase64Maybe(s, true)
-					continue
-				}
+			if changed {
+				out = make(map[string]any, len(val))
+				out[k] = sanitized
 			}
-			if k == "url" {
-				if s, ok := child.(string); ok {
-					if strings.Contains(s, ";base64,") && len(s) > 100 {
-						out[k] = truncateBase64Maybe(s, true)
-						continue
-					}
-				}
-			}
-			if k == "content" {
-				if s, ok := child.(string); ok {
-					if strings.Contains(s, "![image](data:") && strings.Contains(s, ";base64,") && len(s) > 100 {
-						out[k] = truncateBase64Maybe(s, true)
-						continue
-					}
-				}
-			}
-			out[k] = sanitizeJSONForLogContext(child, inInlineData)
 		}
-		return out
+
+		if out == nil {
+			return val, false
+		}
+
+		for k, child := range val {
+			if _, ok := out[k]; ok {
+				continue
+			}
+			out[k] = child
+		}
+		return out, true
 	case []any:
-		out := make([]any, len(val))
 		for i, item := range val {
-			out[i] = sanitizeJSONForLogContext(item, inInlineData)
+			sanitized, changed := sanitizeJSONForLogContextInner(item, inInlineData)
+			if !changed {
+				continue
+			}
+			out := make([]any, len(val))
+			copy(out, val[:i])
+			out[i] = sanitized
+			for j := i + 1; j < len(val); j++ {
+				out[j], _ = sanitizeJSONForLogContextInner(val[j], inInlineData)
+			}
+			return out, true
 		}
-		return out
+		return val, false
 	case string:
 		if strings.Contains(val, ";base64,") && len(val) > 100 {
-			return truncateBase64Maybe(val, true)
+			sanitized := truncateBase64Maybe(val, true)
+			return sanitized, sanitized != val
 		}
-		return truncateBase64Maybe(val, inInlineData)
+		sanitized := truncateBase64Maybe(val, inInlineData)
+		return sanitized, sanitized != val
 	case nil, bool,
 		float64, float32,
 		int, int8, int16, int32, int64,
 		uint, uint8, uint16, uint32, uint64:
-		return v
+		return v, false
 	default:
 		// Support structs/custom types logged via printJSON (e.g., OpenAI/Gemini/Claude response structs).
 		b, err := json.Marshal(val)
 		if err != nil {
-			return v
+			return v, false
 		}
 		var decoded any
 		if err := json.Unmarshal(b, &decoded); err != nil {
-			return v
+			return v, false
 		}
-		return sanitizeJSONForLogContext(decoded, inInlineData)
+		sanitized, _ := sanitizeJSONForLogContextInner(decoded, inInlineData)
+		// Decoding a struct into "any" changes the representation; treat it as changed.
+		return sanitized, true
 	}
+}
+
+func shouldSanitizeMarshaledJSON(b []byte) bool {
+	if len(b) <= 100 {
+		return false
+	}
+	if bytes.Contains(b, []byte(";base64,")) {
+		return true
+	}
+	if bytes.Contains(b, []byte(`"inlineData"`)) {
+		return true
+	}
+	if bytes.Contains(b, []byte(`"type":"base64"`)) {
+		return true
+	}
+	// Common image base64 prefixes when embedded as raw strings.
+	for _, p := range [][]byte{
+		[]byte(`"/9j/`),
+		[]byte(`"iVBOR`),
+		[]byte(`"R0lGOD`),
+		[]byte(`"UklGR`),
+		[]byte(`"Qk1`),
+		[]byte(`"AAAA`),
+	} {
+		if bytes.Contains(b, p) {
+			return true
+		}
+	}
+	return false
 }
