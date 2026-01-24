@@ -174,25 +174,31 @@ func extractContentParts(content any, contentsSoFar []vertex.Content, isClaudeMo
 					// Some clients do not persist/return the thinking signature. Best-effort recovery:
 					// - If a tool_use follows in the same assistant content, look up its cached signature.
 					// - Otherwise, drop the thinking block to avoid sending invalid extended thinking history.
-					if sig == "" {
-						var toolUseID string
-						for j := i + 1; j < len(v); j++ {
-							m2, ok2 := v[j].(map[string]any)
-							if !ok2 {
-								continue
-							}
-							if t2, _ := m2["type"].(string); t2 != "tool_use" {
-								continue
-							}
-							idv, _ := m2["id"].(string)
-							idv = strings.TrimSpace(idv)
-							if idv != "" {
-								toolUseID = idv
-								break
-							}
+					var toolUseID string
+					for j := i + 1; j < len(v); j++ {
+						m2, ok2 := v[j].(map[string]any)
+						if !ok2 {
+							continue
 						}
-						if toolUseID != "" {
+						if t2, _ := m2["type"].(string); t2 != "tool_use" {
+							continue
+						}
+						idv, _ := m2["id"].(string)
+						idv = strings.TrimSpace(idv)
+						if idv != "" {
+							toolUseID = idv
+							break
+						}
+					}
+					if toolUseID != "" {
+						if sig == "" {
 							if e, ok := signature.GetManager().LookupByToolCallID(toolUseID); ok {
+								sig = strings.TrimSpace(e.Signature)
+							}
+						} else if len(sig) <= 50 {
+							// Clients may persist only a short prefix of the opaque signature.
+							// Expand it from disk using tool_use id + signature prefix.
+							if e, ok := signature.GetManager().LookupByToolCallIDAndSignaturePrefix(toolUseID, sig); ok {
 								sig = strings.TrimSpace(e.Signature)
 							}
 						}
@@ -210,25 +216,29 @@ func extractContentParts(content any, contentsSoFar []vertex.Content, isClaudeMo
 				data = strings.TrimSpace(data)
 				if isClaudeModel {
 					// Some clients may drop the opaque redacted payload; try to recover from a tool_use id.
-					if data == "" {
-						var toolUseID string
-						for j := i + 1; j < len(v); j++ {
-							m2, ok2 := v[j].(map[string]any)
-							if !ok2 {
-								continue
-							}
-							if t2, _ := m2["type"].(string); t2 != "tool_use" {
-								continue
-							}
-							idv, _ := m2["id"].(string)
-							idv = strings.TrimSpace(idv)
-							if idv != "" {
-								toolUseID = idv
-								break
-							}
+					var toolUseID string
+					for j := i + 1; j < len(v); j++ {
+						m2, ok2 := v[j].(map[string]any)
+						if !ok2 {
+							continue
 						}
-						if toolUseID != "" {
+						if t2, _ := m2["type"].(string); t2 != "tool_use" {
+							continue
+						}
+						idv, _ := m2["id"].(string)
+						idv = strings.TrimSpace(idv)
+						if idv != "" {
+							toolUseID = idv
+							break
+						}
+					}
+					if toolUseID != "" {
+						if data == "" {
 							if e, ok := signature.GetManager().LookupByToolCallID(toolUseID); ok {
+								data = strings.TrimSpace(e.Signature)
+							}
+						} else if len(data) <= 50 {
+							if e, ok := signature.GetManager().LookupByToolCallIDAndSignaturePrefix(toolUseID, data); ok {
 								data = strings.TrimSpace(e.Signature)
 							}
 						}

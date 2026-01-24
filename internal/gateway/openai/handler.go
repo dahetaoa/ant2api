@@ -13,6 +13,7 @@ import (
 	httppkg "anti2api-golang/refactor/internal/pkg/http"
 	"anti2api-golang/refactor/internal/pkg/id"
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
+	"anti2api-golang/refactor/internal/pkg/memory"
 	"anti2api-golang/refactor/internal/pkg/modelutil"
 	"anti2api-golang/refactor/internal/vertex"
 )
@@ -88,6 +89,7 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		httppkg.WriteOpenAIError(w, http.StatusBadRequest, "读取请求体失败，请检查请求是否正确发送。")
 		return
 	}
+	defer memory.AfterLargeRequest(int64(len(body)))
 
 	if logger.IsClientLogEnabled() {
 		logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, body)
@@ -105,6 +107,8 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		httppkg.WriteOpenAIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// 清理请求体中的大数据引用，允许GC回收原始图片数据
+	req.ClearLargeData()
 
 	ctx := r.Context()
 	store := credential.GetStore()
@@ -161,6 +165,8 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		logger.ClientResponse(http.StatusOK, time.Since(startTime), out)
 	}
 	httppkg.WriteJSON(w, http.StatusOK, out)
+	// Clear large data references to allow GC to reclaim response memory
+	vresp.ClearLargeData()
 }
 
 func handleStreamWithRetry(w http.ResponseWriter, ctx context.Context, req *ChatRequest, vreq *vertex.Request, requestID string, store *credential.Store, attempts int) {

@@ -1,5 +1,14 @@
 package openai
 
+import (
+	"bytes"
+
+	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
+	"anti2api-golang/refactor/internal/pkg/lazyimage"
+
+	"github.com/bytedance/sonic"
+)
+
 type ChatRequest struct {
 	Model       string    `json:"model"`
 	Messages    []Message `json:"messages"`
@@ -13,6 +22,9 @@ type ChatRequest struct {
 	// ToolChoice 为 OpenAI 兼容字段：当前未实现 tool_choice 语义（保持历史行为）。
 	ToolChoice      any    `json:"tool_choice,omitempty"`
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+
+	rawBody    []byte           `json:"-"`
+	lazyImages *lazyimage.Index `json:"-"`
 }
 
 type Message struct {
@@ -59,4 +71,47 @@ type ToolCall struct {
 type FunctionCall struct {
 	Name      string `json:"name"`
 	Arguments string `json:"arguments"`
+}
+
+var noCopyJSON = sonic.Config{
+	EscapeHTML:  false,
+	SortMapKeys: false,
+	UseInt64:    true,
+	CopyString:  false,
+}.Froze()
+
+func (r *ChatRequest) UnmarshalJSON(data []byte) error {
+	type alias ChatRequest
+	var tmp alias
+	hasImages := bytes.Contains(data, []byte("data:image/"))
+	if hasImages {
+		if err := noCopyJSON.Unmarshal(data, &tmp); err != nil {
+			return err
+		}
+	} else {
+		if err := jsonpkg.Unmarshal(data, &tmp); err != nil {
+			return err
+		}
+	}
+	*r = ChatRequest(tmp)
+
+	var idx *lazyimage.Index
+	if hasImages {
+		idx = lazyimage.NewIndex(data)
+	}
+	if idx != nil && !idx.IsEmpty() {
+		r.rawBody = data
+		r.lazyImages = idx
+	} else {
+		r.rawBody = nil
+		r.lazyImages = nil
+	}
+	return nil
+}
+
+// ClearLargeData 清理请求体中的大数据引用，允许GC回收原始请求体。
+// 应在请求转换完成后调用。
+func (r *ChatRequest) ClearLargeData() {
+	r.rawBody = nil
+	r.lazyImages = nil
 }

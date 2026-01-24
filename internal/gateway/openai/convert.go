@@ -8,6 +8,7 @@ import (
 	gwcommon "anti2api-golang/refactor/internal/gateway/common"
 	"anti2api-golang/refactor/internal/pkg/id"
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
+	"anti2api-golang/refactor/internal/pkg/lazyimage"
 	"anti2api-golang/refactor/internal/pkg/modelutil"
 	"anti2api-golang/refactor/internal/signature"
 	"anti2api-golang/refactor/internal/vertex"
@@ -58,12 +59,13 @@ func toVertexContents(req *ChatRequest, requestID string) []vertex.Content {
 	model := strings.TrimSpace(req.Model)
 	isClaudeThinking := modelutil.IsClaudeThinking(model)
 	isGemini := modelutil.IsGemini(model)
+	imgIdx := req.lazyImages
 	for _, m := range req.Messages {
 		switch m.Role {
 		case "system":
 			continue
 		case "user":
-			out = append(out, vertex.Content{Role: "user", Parts: extractUserParts(m.Content)})
+			out = append(out, vertex.Content{Role: "user", Parts: extractUserParts(m.Content, imgIdx)})
 		case "assistant":
 			parts := make([]vertex.Part, 0, 2+len(m.ToolCalls))
 			thinkingText := strings.TrimSpace(m.Reasoning)
@@ -105,7 +107,7 @@ func toVertexContents(req *ChatRequest, requestID string) []vertex.Content {
 			}
 
 			if t := gwcommon.ExtractTextFromContent(m.Content, "\n", false); t != "" {
-				images := parseMarkdownImages(t)
+				images := parseMarkdownImages(t, imgIdx)
 				if len(images) == 0 {
 					parts = append(parts, vertex.Part{Text: t})
 				} else {
@@ -117,7 +119,7 @@ func toVertexContents(req *ChatRequest, requestID string) []vertex.Content {
 							}
 						}
 						parts = append(parts, vertex.Part{
-							InlineData:       &vertex.InlineData{MimeType: img.mimeType, Data: img.data},
+							InlineData:       img.inline,
 							ThoughtSignature: img.signature,
 						})
 						last = img.end
@@ -238,7 +240,7 @@ func toVertexTools(tools []Tool) []vertex.Tool {
 	return out
 }
 
-func extractUserParts(content any) []vertex.Part {
+func extractUserParts(content any, imgIdx *lazyimage.Index) []vertex.Part {
 	var out []vertex.Part
 	switch v := content.(type) {
 	case string:
@@ -263,16 +265,20 @@ func extractUserParts(content any) []vertex.Part {
 					continue
 				}
 				urlStr, _ := img["url"].(string)
-				if inline := parseImageURL(urlStr); inline != nil {
-					imageKey := inline.Data
-					if len(imageKey) > 20 {
-						imageKey = imageKey[:20]
-					}
+				if inline := parseImageURL(urlStr, imgIdx); inline != nil {
+					imageKey := inline.SignatureKey()
 					sig := ""
-					if e, ok := signature.GetManager().LookupByToolCallID(imageKey); ok {
-						sig = e.Signature
+					if imageKey != "" {
+						if e, ok := signature.GetManager().LookupByToolCallID(imageKey); ok {
+							sig = e.Signature
+						}
 					}
 					out = append(out, vertex.Part{InlineData: inline, ThoughtSignature: sig})
+
+					// Help GC: drop large decoded strings once we've bound to the raw body bytes.
+					if inline.IsLazy() {
+						img["url"] = ""
+					}
 				}
 			}
 		}
@@ -283,53 +289,97 @@ func extractUserParts(content any) []vertex.Part {
 var markdownImageRe = regexp.MustCompile(`!\[image\]\(data:([^;]+);base64,([^)]+)\)`)
 
 type markdownImage struct {
-	mimeType  string
-	data      string
+	inline    *vertex.InlineData
 	signature string
 	start     int
 	end       int
 }
 
-func parseMarkdownImages(content string) []markdownImage {
-	matches := markdownImageRe.FindAllStringSubmatchIndex(content, -1)
+type markdownImageMatch struct {
+	mimeType string
+	data     string
+	start    int
+	end      int
+}
+
+func parseMarkdownImages(content string, imgIdx *lazyimage.Index) []markdownImage {
+	matches := parseMarkdownImageMatches(content)
 	if len(matches) == 0 {
 		return nil
 	}
 
 	out := make([]markdownImage, 0, len(matches))
 	for _, m := range matches {
-		if len(m) != 6 {
+		inline := matchMarkdownInlineData(m.mimeType, m.data, imgIdx)
+		if inline == nil {
 			continue
 		}
-		mimeType := content[m[2]:m[3]]
-		base64Data := content[m[4]:m[5]]
 
-		imageKey := base64Data
-		if len(imageKey) > 20 {
-			imageKey = imageKey[:20]
-		}
+		imageKey := inline.SignatureKey()
 		sig := ""
-		if e, ok := signature.GetManager().LookupByToolCallID(imageKey); ok {
-			sig = e.Signature
+		if imageKey != "" {
+			if e, ok := signature.GetManager().LookupByToolCallID(imageKey); ok {
+				sig = e.Signature
+			}
 		}
 
 		out = append(out, markdownImage{
-			mimeType:  mimeType,
-			data:      base64Data,
+			inline:    inline,
 			signature: sig,
-			start:     m[0],
-			end:       m[1],
+			start:     m.start,
+			end:       m.end,
 		})
 	}
 	return out
 }
 
-func parseImageURL(urlStr string) *vertex.InlineData {
-	re := regexp.MustCompile(`^data:image/(\w+);base64,(.+)$`)
-	if matches := re.FindStringSubmatch(urlStr); len(matches) == 3 {
-		return &vertex.InlineData{MimeType: "image/" + matches[1], Data: matches[2]}
+func parseMarkdownImageMatches(content string) []markdownImageMatch {
+	matches := markdownImageRe.FindAllStringSubmatchIndex(content, -1)
+	if len(matches) == 0 {
+		return nil
 	}
-	return nil
+	out := make([]markdownImageMatch, 0, len(matches))
+	for _, m := range matches {
+		if len(m) != 6 {
+			continue
+		}
+		out = append(out, markdownImageMatch{
+			mimeType: content[m[2]:m[3]],
+			data:     content[m[4]:m[5]],
+			start:    m[0],
+			end:      m[1],
+		})
+	}
+	return out
+}
+
+func matchMarkdownInlineData(mimeType string, base64Data string, imgIdx *lazyimage.Index) *vertex.InlineData {
+	if imgIdx != nil {
+		if ref := imgIdx.MatchBase64String(base64Data, mimeType); ref != nil {
+			return vertex.NewInlineDataFromRef(ref)
+		}
+	}
+	return vertex.NewInlineData(mimeType, base64Data)
+}
+
+func parseImageURL(urlStr string, imgIdx *lazyimage.Index) *vertex.InlineData {
+	const dataPrefix = "data:"
+	const base64Mark = ";base64,"
+	if !strings.HasPrefix(urlStr, dataPrefix) || !strings.HasPrefix(urlStr, "data:image/") {
+		return nil
+	}
+	marker := strings.Index(urlStr, base64Mark)
+	if marker < 0 {
+		return nil
+	}
+	mimeType := urlStr[len(dataPrefix):marker]
+	base64Data := urlStr[marker+len(base64Mark):]
+	if imgIdx != nil {
+		if ref := imgIdx.MatchBase64String(base64Data, mimeType); ref != nil {
+			return vertex.NewInlineDataFromRef(ref)
+		}
+	}
+	return vertex.NewInlineData(mimeType, base64Data)
 }
 
 func parseArgs(args string) map[string]any {

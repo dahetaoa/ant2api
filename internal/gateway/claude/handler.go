@@ -12,6 +12,7 @@ import (
 	httppkg "anti2api-golang/refactor/internal/pkg/http"
 	"anti2api-golang/refactor/internal/pkg/id"
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
+	"anti2api-golang/refactor/internal/pkg/memory"
 	"anti2api-golang/refactor/internal/pkg/modelutil"
 	"anti2api-golang/refactor/internal/vertex"
 )
@@ -32,6 +33,7 @@ func HandleMessages(w http.ResponseWriter, r *http.Request) {
 		httppkg.WriteClaudeError(w, http.StatusBadRequest, "读取请求体失败，请检查请求是否正确发送。")
 		return
 	}
+	defer memory.AfterLargeRequest(int64(len(body)))
 
 	if logger.IsClientLogEnabled() {
 		logger.ClientRequestWithHeaders(r.Method, r.URL.Path, r.Header, body)

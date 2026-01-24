@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -77,8 +76,8 @@ func ToChatCompletion(resp *vertex.Response, model string, requestID string) *Ch
 	}
 	parts := resp.Response.Candidates[0].Content.Parts
 
-	var content string
-	var reasoning string
+	var contentBuilder strings.Builder
+	var reasoningBuilder strings.Builder
 	var toolCalls []ToolCall
 
 	sigMgr := signature.GetManager()
@@ -88,7 +87,7 @@ func ToChatCompletion(resp *vertex.Response, model string, requestID string) *Ch
 
 	for _, p := range parts {
 		if p.Thought {
-			reasoning += p.Text
+			reasoningBuilder.WriteString(p.Text)
 			pendingReasoning.WriteString(p.Text)
 			if isClaudeThinking && p.ThoughtSignature != "" {
 				// Claude thinking: bind this signature to the first subsequent tool call id.
@@ -97,20 +96,30 @@ func ToChatCompletion(resp *vertex.Response, model string, requestID string) *Ch
 			continue
 		}
 		if p.Text != "" {
-			content += p.Text
+			contentBuilder.WriteString(p.Text)
 			continue
 		}
 		if p.InlineData != nil {
+			// 使用 string([]byte(...)) 创建独立副本，断开与原始图片数据的引用
+			// 避免子字符串切片导致整个1MB+数据无法被GC回收
 			imageKey := p.InlineData.Data
-			if len(imageKey) > 20 {
-				imageKey = imageKey[:20]
+			if len(imageKey) > 50 {
+				imageKey = string([]byte(imageKey[:50]))
 			}
 			if p.ThoughtSignature != "" {
 				sigMgr.Save(requestID, imageKey, p.ThoughtSignature, pendingReasoning.String(), model)
 				pendingReasoning.Reset()
 			}
-			imageMarkdown := fmt.Sprintf("![image](data:%s;base64,%s)", p.InlineData.MimeType, p.InlineData.Data)
-			content += imageMarkdown
+			// CRITICAL: Create independent copy of InlineData.Data before writing to contentBuilder.
+			// strings.Builder may share the underlying byte array with the input string.
+			// Without this copy, the entire Response object (containing multi-MB image data)
+			// cannot be garbage collected because the output 'content' string holds a reference.
+			imageData := string([]byte(p.InlineData.Data))
+			contentBuilder.WriteString("![image](data:")
+			contentBuilder.WriteString(p.InlineData.MimeType)
+			contentBuilder.WriteString(";base64,")
+			contentBuilder.WriteString(imageData)
+			contentBuilder.WriteString(")")
 			continue
 		}
 		if p.FunctionCall != nil {
@@ -156,8 +165,8 @@ func ToChatCompletion(resp *vertex.Response, model string, requestID string) *Ch
 		finish = "tool_calls"
 	}
 	out.Choices[0].FinishReason = &finish
-	out.Choices[0].Message.Content = content
-	out.Choices[0].Message.Reasoning = reasoning
+	out.Choices[0].Message.Content = contentBuilder.String()
+	out.Choices[0].Message.Reasoning = reasoningBuilder.String()
 	out.Choices[0].Message.ToolCalls = toolCalls
 
 	return out

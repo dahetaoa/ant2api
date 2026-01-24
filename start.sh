@@ -325,6 +325,14 @@ start_server() {
     echo ""
     
     cd "$SCRIPT_DIR"
+    
+    # Go 内存回收：如未显式设置，则默认使用 MADV_DONTNEED，让内存更快归还给 OS/容器统计。
+    if [[ -z "${GODEBUG:-}" ]]; then
+        export GODEBUG="madvdontneed=1"
+    elif [[ "$GODEBUG" != *"madvdontneed="* ]]; then
+        export GODEBUG="${GODEBUG},madvdontneed=1"
+    fi
+
     exec "$SERVER_BIN"
 }
 

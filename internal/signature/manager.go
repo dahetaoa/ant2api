@@ -1,6 +1,7 @@
 package signature
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -49,12 +50,12 @@ func (m *Manager) Save(requestID, toolCallID, signature, reasoning, model string
 
 	m.store.PutHot(e)
 	m.cache.Put(EntryIndex{
-		RequestID:  requestID,
-		ToolCallID: toolCallID,
-		Model:      model,
-		CreatedAt:  now,
-		LastAccess: now,
-		Offset:     -1,
+		RequestID:       requestID,
+		ToolCallID:      toolCallID,
+		Model:           model,
+		CreatedAt:       now,
+		LastAccess:      now,
+		SignaturePrefix: signaturePrefix(signature),
 	})
 	m.store.Enqueue(e)
 }
@@ -79,6 +80,33 @@ func (m *Manager) LookupByToolCallID(toolCallID string) (Entry, bool) {
 	}
 	e, ok := m.store.LoadByIndex(idx)
 	if !ok || e.Signature == "" {
+		return Entry{}, false
+	}
+	e.LastAccess = idx.LastAccess
+	return e, true
+}
+
+// LookupByToolCallIDAndSignaturePrefix expands a short signature prefix (index) into the full signature.
+// It is designed for clients that persist only a small prefix of thoughtSignature to reduce payload size.
+func (m *Manager) LookupByToolCallIDAndSignaturePrefix(toolCallID string, sigPrefix string) (Entry, bool) {
+	sigPrefix = strings.TrimSpace(sigPrefix)
+	if toolCallID == "" || sigPrefix == "" {
+		return Entry{}, false
+	}
+
+	idx, ok := m.cache.GetByToolCallID(toolCallID)
+	if !ok {
+		return Entry{}, false
+	}
+	if idx.SignaturePrefix != "" && !strings.HasPrefix(idx.SignaturePrefix, sigPrefix) {
+		return Entry{}, false
+	}
+
+	e, ok := m.store.LoadByIndex(idx)
+	if !ok || e.Signature == "" {
+		return Entry{}, false
+	}
+	if !strings.HasPrefix(e.Signature, sigPrefix) {
 		return Entry{}, false
 	}
 	e.LastAccess = idx.LastAccess

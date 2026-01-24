@@ -16,6 +16,7 @@ import (
 	"anti2api-golang/refactor/internal/pkg/id"
 	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
 	"anti2api-golang/refactor/internal/pkg/modelutil"
+	sigpkg "anti2api-golang/refactor/internal/signature"
 	"anti2api-golang/refactor/internal/vertex"
 )
 
@@ -383,12 +384,14 @@ func HandleGenerateContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	backendModel := modelutil.BackendModelID(model)
+	contents := vertex.SanitizeContents(req.Contents)
+	expandThoughtSignatures(contents)
 	vreq := &vertex.Request{
 		Project:   id.ProjectID(),
 		Model:     backendModel,
 		RequestID: id.RequestID(),
 		Request: vertex.InnerReq{
-			Contents:          vertex.SanitizeContents(req.Contents),
+			Contents:          contents,
 			SystemInstruction: req.SystemInstruction,
 			GenerationConfig:  toVertexGenerationConfig(model, req.GenerationConfig),
 			Tools:             req.Tools,
@@ -494,12 +497,14 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	backendModel := modelutil.BackendModelID(model)
+	contents := vertex.SanitizeContents(req.Contents)
+	expandThoughtSignatures(contents)
 	vreq := &vertex.Request{
 		Project:   id.ProjectID(),
 		Model:     backendModel,
 		RequestID: id.RequestID(),
 		Request: vertex.InnerReq{
-			Contents:          vertex.SanitizeContents(req.Contents),
+			Contents:          contents,
 			SystemInstruction: req.SystemInstruction,
 			GenerationConfig:  toVertexGenerationConfig(model, req.GenerationConfig),
 			Tools:             req.Tools,
@@ -642,6 +647,52 @@ func HandleStreamGenerateContent(w http.ResponseWriter, r *http.Request) {
 		if logger.IsClientLogEnabled() {
 			logger.ClientStreamResponse(http.StatusOK, duration, mergedResp)
 		}
+	}
+}
+
+func expandThoughtSignatures(contents []vertex.Content) {
+	const sigIndexLen = 50
+	if len(contents) == 0 {
+		return
+	}
+
+	// Lazily initialize the signature manager only when we see short signatures.
+	var mgr *sigpkg.Manager
+	for ci := range contents {
+		parts := contents[ci].Parts
+		for pi := range parts {
+			prefix := strings.TrimSpace(parts[pi].ThoughtSignature)
+			if prefix == "" || len(prefix) > sigIndexLen {
+				continue
+			}
+			if mgr == nil {
+				mgr = sigpkg.GetManager()
+			}
+
+			toolCallID := ""
+			if parts[pi].FunctionCall != nil {
+				toolCallID = strings.TrimSpace(parts[pi].FunctionCall.ID)
+			}
+			if toolCallID == "" && parts[pi].Thought {
+				for j := pi + 1; j < len(parts); j++ {
+					if parts[j].FunctionCall == nil {
+						continue
+					}
+					idv := strings.TrimSpace(parts[j].FunctionCall.ID)
+					if idv != "" {
+						toolCallID = idv
+						break
+					}
+				}
+			}
+			if toolCallID == "" {
+				continue
+			}
+			if e, ok := mgr.LookupByToolCallIDAndSignaturePrefix(toolCallID, prefix); ok {
+				parts[pi].ThoughtSignature = e.Signature
+			}
+		}
+		contents[ci].Parts = parts
 	}
 }
 

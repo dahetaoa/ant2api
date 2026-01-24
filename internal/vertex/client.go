@@ -89,17 +89,33 @@ func (c *Client) SendRequest(ctx context.Context, req *Request, accessToken stri
 	endpoint := config.GetEndpointManager().GetActiveEndpoint()
 	reqURL := endpoint.NoStreamURL()
 
-	body, err := jsonpkg.Marshal(req)
-	if err != nil {
-		return nil, err
+	var bodyBytes []byte
+	var bodyReader io.Reader
+	var streamBody io.ReadCloser
+	if logger.IsBackendLogEnabled() || !hasLazyInlineData(req) {
+		var err error
+		bodyBytes, err = jsonpkg.Marshal(req)
+		if err != nil {
+			return nil, err
+		}
+		if logger.IsBackendLogEnabled() {
+			logger.BackendRequest(http.MethodPost, reqURL, bodyBytes)
+		}
+		bodyReader = bytes.NewReader(bodyBytes)
+	} else {
+		var err error
+		streamBody, err = streamRequestBody(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		bodyReader = streamBody
 	}
 
-	if logger.IsBackendLogEnabled() {
-		logger.BackendRequest(http.MethodPost, reqURL, body)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bodyReader)
 	if err != nil {
+		if streamBody != nil {
+			_ = streamBody.Close()
+		}
 		return nil, err
 	}
 
@@ -157,17 +173,33 @@ func (c *Client) SendStreamRequest(ctx context.Context, req *Request, accessToke
 	endpoint := config.GetEndpointManager().GetActiveEndpoint()
 	reqURL := endpoint.StreamURL()
 
-	body, err := jsonpkg.Marshal(req)
-	if err != nil {
-		return nil, err
+	var bodyBytes []byte
+	var bodyReader io.Reader
+	var streamBody io.ReadCloser
+	if logger.IsBackendLogEnabled() || !hasLazyInlineData(req) {
+		var err error
+		bodyBytes, err = jsonpkg.Marshal(req)
+		if err != nil {
+			return nil, err
+		}
+		if logger.IsBackendLogEnabled() {
+			logger.BackendRequest(http.MethodPost, reqURL, bodyBytes)
+		}
+		bodyReader = bytes.NewReader(bodyBytes)
+	} else {
+		var err error
+		streamBody, err = streamRequestBody(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		bodyReader = streamBody
 	}
 
-	if logger.IsBackendLogEnabled() {
-		logger.BackendRequest(http.MethodPost, reqURL, body)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bodyReader)
 	if err != nil {
+		if streamBody != nil {
+			_ = streamBody.Close()
+		}
 		return nil, err
 	}
 
@@ -202,6 +234,41 @@ func (c *Client) SendStreamRequest(ctx context.Context, req *Request, accessToke
 	}
 
 	return resp, nil
+}
+
+func hasLazyInlineData(req *Request) bool {
+	if req == nil {
+		return false
+	}
+	if req.Request.SystemInstruction != nil {
+		for _, p := range req.Request.SystemInstruction.Parts {
+			if p.InlineData != nil && p.InlineData.IsLazy() {
+				return true
+			}
+		}
+	}
+	for _, c := range req.Request.Contents {
+		for _, p := range c.Parts {
+			if p.InlineData != nil && p.InlineData.IsLazy() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func streamRequestBody(ctx context.Context, v any) (io.ReadCloser, error) {
+	pr, pw := io.Pipe()
+	enc := jsonpkg.NewEncoder(pw)
+
+	go func() {
+		_ = pw.CloseWithError(enc.Encode(v))
+	}()
+	go func() {
+		<-ctx.Done()
+		_ = pr.CloseWithError(ctx.Err())
+	}()
+	return pr, nil
 }
 
 func ExtractErrorDetails(resp *http.Response, body []byte) *APIError {

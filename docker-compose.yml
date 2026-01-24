@@ -23,4 +23,8 @@ services:
 
       # ===== 调试配置 =====
       - DEBUG=off
+      # Go 内存回收：使用 MADV_DONTNEED，让容器内存曲线更快回落（可能增加少量 page fault）
+      - GODEBUG=madvdontneed=1
+      # Go 内存软限制：让 runtime 更积极地进行 GC 和内存归还（不是硬限制，不会导致 OOM）
+      - GOMEMLIMIT=100MiB
     restart: unless-stopped

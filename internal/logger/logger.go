@@ -33,6 +33,8 @@ const (
 
 var currentLogLevel LogLevel
 
+
+
 func Init() {
 	cfg := config.Get()
 	currentLogLevel = parseLogLevel(cfg.Debug)
@@ -261,6 +263,8 @@ func printJSON(v any) {
 		return
 	}
 
+
+
 	switch v.(type) {
 	case map[string]any, []any, string,
 		nil, bool,
@@ -282,6 +286,7 @@ func printJSON(v any) {
 		fmt.Printf("%v\n", v)
 		return
 	}
+
 
 	if shouldSanitizeMarshaledJSON(raw) {
 		var decoded any
@@ -311,6 +316,17 @@ func formatRawJSON(rawJSON []byte) string {
 	if currentLogLevel == LogOff {
 		return ""
 	}
+
+
+	// 绝大多数场景无需 sanitize：直接做缩进即可，避免 Unmarshal/MarshalIndent 的额外拷贝与分配。
+	if !shouldSanitizeMarshaledJSON(rawJSON) {
+		var buf bytes.Buffer
+		if err := json.Indent(&buf, rawJSON, "", "  "); err != nil {
+			return string(rawJSON)
+		}
+		return buf.String()
+	}
+
 	var data any
 	if err := json.Unmarshal(rawJSON, &data); err != nil {
 		return string(rawJSON)

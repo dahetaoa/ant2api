@@ -1,6 +1,12 @@
 package vertex
 
-import "encoding/json"
+import (
+	"encoding"
+	"unsafe"
+
+	jsonpkg "anti2api-golang/refactor/internal/pkg/json"
+	"anti2api-golang/refactor/internal/pkg/lazyimage"
+)
 
 // Request is the Vertex AI Cloud Code API wrapper request.
 // It matches the format used by antigravity Cloud Code endpoints.
@@ -50,7 +56,82 @@ type FunctionResponse struct {
 
 type InlineData struct {
 	MimeType string `json:"mimeType"`
-	Data     string `json:"data"`
+	// Data is kept for compatibility with response processing paths (OpenAI markdown reconstruction, etc.).
+	// It is not used for request JSON serialization when DataText is present.
+	Data     string     `json:"-"`
+	DataText base64Text `json:"data"`
+
+	ref *lazyimage.ImageRef `json:"-"`
+}
+
+func NewInlineData(mimeType string, data string) *InlineData {
+	return &InlineData{MimeType: mimeType, Data: data, DataText: base64Text{str: data}}
+}
+
+func NewInlineDataFromRef(ref *lazyimage.ImageRef) *InlineData {
+	if ref == nil {
+		return nil
+	}
+	return &InlineData{MimeType: ref.MimeType(), DataText: base64Text{ref: ref}, ref: ref}
+}
+
+func (i *InlineData) SignatureKey() string {
+	if i == nil {
+		return ""
+	}
+	if i.ref != nil {
+		return i.ref.SignatureKey()
+	}
+	if len(i.Data) > 50 {
+		// 使用 string([]byte(...)) 创建独立副本，断开与原始图片数据的引用
+		// 避免子字符串切片导致整个大尺寸base64数据无法被GC回收
+		return string([]byte(i.Data[:50]))
+	}
+	return i.Data
+}
+
+func (i *InlineData) IsLazy() bool { return i != nil && i.ref != nil }
+
+func (i *InlineData) UnmarshalJSON(data []byte) error {
+	// Preserve existing wire format while allowing custom request serialization.
+	// Note: We only store Data field during response deserialization to avoid
+	// double memory allocation. DataText is only used for request serialization.
+	type wire struct {
+		MimeType string `json:"mimeType"`
+		Data     string `json:"data"`
+	}
+	var w wire
+	// Use our jsonpkg (sonic with CopyString: true) instead of standard library.
+	// This ensures decoded strings are independent copies, allowing the original
+	// response buffer to be garbage collected after request processing completes.
+	if err := jsonpkg.Unmarshal(data, &w); err != nil {
+		return err
+	}
+	i.MimeType = w.MimeType
+	i.Data = w.Data
+	// Don't set DataText.str here - it would duplicate the entire base64 string.
+	// DataText is only used for request serialization via NewInlineData/NewInlineDataFromRef.
+	i.DataText = base64Text{}
+	i.ref = nil
+	return nil
+}
+
+type base64Text struct {
+	str string
+	ref *lazyimage.ImageRef
+}
+
+var _ encoding.TextMarshaler = base64Text{}
+
+func (b base64Text) MarshalText() ([]byte, error) {
+	if b.ref != nil {
+		return b.ref.DataBytes(), nil
+	}
+	if b.str == "" {
+		return nil, nil
+	}
+	// Avoid allocating []byte(str) for large payloads; encoder treats the returned bytes as read-only.
+	return unsafe.Slice(unsafe.StringData(b.str), len(b.str)), nil
 }
 
 type SystemInstruction struct {
@@ -116,7 +197,7 @@ func (t ThinkingConfig) MarshalJSON() ([]byte, error) {
 		b := t.ThinkingBudget
 		w.ThinkingBudget = &b
 	}
-	return json.Marshal(w)
+	return jsonpkg.Marshal(w)
 }
 
 type Response struct {
@@ -137,4 +218,23 @@ type UsageMetadata struct {
 	CandidatesTokenCount int `json:"candidatesTokenCount"`
 	TotalTokenCount      int `json:"totalTokenCount"`
 	ThoughtsTokenCount   int `json:"thoughtsTokenCount,omitempty"`
+}
+
+// ClearLargeData clears large data references from the response to allow GC to reclaim memory.
+// Call this after response processing is complete (e.g., after ToChatCompletion and WriteJSON).
+func (r *Response) ClearLargeData() {
+	if r == nil {
+		return
+	}
+	for i := range r.Response.Candidates {
+		for j := range r.Response.Candidates[i].Content.Parts {
+			p := &r.Response.Candidates[i].Content.Parts[j]
+			if p.InlineData != nil {
+				p.InlineData.Data = ""
+				p.InlineData.DataText = base64Text{}
+			}
+			p.Text = ""
+			p.ThoughtSignature = ""
+		}
+	}
 }

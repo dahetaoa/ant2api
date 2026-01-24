@@ -27,12 +27,12 @@ type EntryIndex struct {
 	Model      string    `json:"model,omitempty"`
 	CreatedAt  time.Time `json:"createdAt,omitempty"`
 	LastAccess time.Time `json:"lastAccess,omitempty"`
+	// SignaturePrefix stores a short prefix of Signature to help safely recover the full value from disk
+	// without keeping it in memory. It is also used to validate matches when toolCallID is not globally unique.
+	SignaturePrefix string `json:"signaturePrefix,omitempty"`
 
-	// FilePath is the JSONL file containing the entry.
-	// Offset is the byte offset (from beginning of file) where the JSON object starts.
-	// For hot (not-yet-flushed) entries, FilePath may be empty and Offset < 0.
-	FilePath string `json:"filePath,omitempty"`
-	Offset   int64  `json:"offset,omitempty"`
+	// Date points to the storage shard (YYYY-MM-DD). For hot (not-yet-persisted) entries, Date is empty.
+	Date string `json:"date,omitempty"`
 }
 
 func (i EntryIndex) Key() string {

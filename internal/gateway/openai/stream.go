@@ -76,8 +76,16 @@ func (sw *StreamWriter) ProcessPart(part StreamDataPart) error {
 			signature.GetManager().Save(sw.requestID, imageKey, part.ThoughtSignature, sw.pendingReasoning.String(), sw.model)
 			sw.pendingReasoning.Reset()
 		}
-		imageMarkdown := fmt.Sprintf("![image](data:%s;base64,%s)", part.InlineData.MimeType, part.InlineData.Data)
-		return sw.writeContentLocked(imageMarkdown)
+		// CRITICAL: Create independent copy of InlineData.Data to break reference chain.
+		// This allows the original response data to be garbage collected after processing.
+		imageData := string([]byte(part.InlineData.Data))
+		var sb strings.Builder
+		sb.WriteString("![image](data:")
+		sb.WriteString(part.InlineData.MimeType)
+		sb.WriteString(";base64,")
+		sb.WriteString(imageData)
+		sb.WriteString(")")
+		return sw.writeContentLocked(sb.String())
 	}
 	if part.FunctionCall != nil {
 		toolCallID := part.FunctionCall.ID

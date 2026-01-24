@@ -24,6 +24,7 @@ ENV DEBUG=off
 # Go 内存优化配置
 ENV GOMEMLIMIT=100MiB
 ENV GOGC=50
+ENV GODEBUG=madvdontneed=1
 
 EXPOSE 8045
 CMD ["./server"]

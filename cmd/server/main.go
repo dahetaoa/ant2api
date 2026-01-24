@@ -16,6 +16,7 @@ import (
 	"anti2api-golang/refactor/internal/credential"
 	"anti2api-golang/refactor/internal/gateway"
 	"anti2api-golang/refactor/internal/logger"
+	"anti2api-golang/refactor/internal/pkg/memory"
 )
 
 func init() {
@@ -26,15 +27,7 @@ func init() {
 
 func main() {
 	cfg := config.Get()
-
-	// 启动内存归还协程：每 30 秒将空闲内存归还给操作系统
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			debug.FreeOSMemory()
-		}
-	}()
+	memory.Init()
 
 	logger.Init()
 	_ = credential.GetStore()
